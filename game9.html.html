@@ -1,21 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Sight Word Wack-a-Mole</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Sight Word Whack-a-Mole</title>
-    <!-- Embedded Readable Early-Reader Font Resource Stack -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
@@ -30,17 +18,59 @@
             user-select: none;
             -webkit-user-select: none;
         }
+        /* Low Profile Dark Header Bar at the top */
+        #header-bar {
+            background-color: #1e293b;
+            color: #f8fafc;
+            height: 5vh;
+            min-height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #0f172a;
+        }
+        #header-bar .hud-item {
+            display: flex;
+            gap: 15px;
+        }
+        #accuracy-text {
+            transition: color 0.3s ease;
+        }
         #game-container {
             position: relative;
             width: 100vw;
-            height: 75vh;
-            min-height: 400px;
+            height: 70vh;
+            min-height: 365px;
             background: #15803d; 
         }
         canvas {
             display: block;
             width: 100%;
             height: 100%;
+        }
+        /* Target word box at the bottom left */
+        #target-word-box {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            background-color: #ffffff;
+            border: 4px solid #eab308;
+            border-radius: 8px;
+            padding: 8px 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 5;
+            pointer-events: none;
+        }
+        #target-word-label {
+            font-size: 24px;
+            color: #1e3a8a;
+            font-weight: bold;
+            margin: 0;
+            letter-spacing: 1px;
         }
         /* Audio Unlock Overlay */
         #audio-overlay {
@@ -136,11 +166,24 @@
 </head>
 <body>
 
+<header id="header-bar">
+    <div id="timer-text">Time Left: 60s</div>
+    <div class="hud-item">
+        <span id="score-text">Whacked: 0 | Missed: 0</span>
+        <span id="accuracy-text">Accuracy: 100% (Need 90%)</span>
+    </div>
+</header>
+
 <div id="game-container">
     <div id="audio-overlay">
         <h1>🔨 Sight Word Whack-a-Mole 🐹</h1>
         <button id="start-audio-btn" onclick="startWithAudio()">TAP TO PLAY WITH MUSIC!</button>
     </div>
+    
+    <div id="target-word-box">
+        <div id="target-word-label">---</div>
+    </div>
+    
     <canvas id="gameCanvas"></canvas>
 </div>
 
@@ -309,7 +352,7 @@ function playBuzzSound() {
 
 function resizeCanvas() {
     let targetWidth = window.innerWidth || 800;
-    let targetHeight = (window.innerHeight * 0.75) || 500;
+    let targetHeight = (window.innerHeight * 0.70) || 500;
     
     const container = document.getElementById('game-container');
     if (container) {
@@ -330,7 +373,7 @@ function initHoles() {
     const rows = 2;
     const cellW = canvas.width / cols;
     const cellH = (canvas.height * 0.6) / rows;
-    const startY = canvas.height * 0.25;
+    const startY = canvas.height * 0.20;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -502,7 +545,6 @@ function drawScenery() {
             ctx.strokeRect(h.x - labelW/2, textY - labelH/2, labelW, labelH);
 
             ctx.fillStyle = '#451a03';
-            // --- FIXED: Integrated explicit accessible font stack onto canvas context text configurations ---
             ctx.font = `bold ${Math.floor(21 * scale)}px "Andika", "Comic Neue", "Comic Sans MS", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -617,43 +659,19 @@ function checkWhackAttempt(holeIndex, clickedMole) {
         mallet.state = 'moving';
         playBuzzSound();
     }
+    updateDOMHUD();
 }
 
-function drawUI() {
-    let boxW = Math.min(280, canvas.width * 0.6);
-    let boxH = 50;
-    let boxY = 15;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#eab308';
-    ctx.lineWidth = 4;
-    ctx.fillRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
-    ctx.strokeRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
-
-    ctx.fillStyle = '#1e3a8a';
-    // --- FIXED: Target Text Font Stack Fix ---
-    ctx.font = 'bold 24px "Andika", "Comic Neue", "Comic Sans MS", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`WHACK: ${targetWord}`, canvas.width / 2, boxY + boxH/2);
-
-    let scoreBoxW = canvas.width < 600 ? 180 : 210;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-    ctx.strokeStyle = '#facc15';
-    ctx.lineWidth = 2;
-    ctx.fillRect(15, 15, scoreBoxW, 75);
-    ctx.strokeRect(15, 15, scoreBoxW, 75);
-
-    ctx.fillStyle = '#14532d';
-    // --- FIXED: Score HUD Font Stack Fix ---
-    ctx.font = 'bold 13px "Andika", "Comic Neue", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 34);
-    ctx.fillText(`Whacked: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 54);
+function updateDOMHUD() {
+    document.getElementById('timer-text').textContent = `Time Left: ${timeLeft}s`;
+    document.getElementById('score-text').textContent = `Whacked: ${correctTaps} | Missed: ${incorrectTaps}`;
     
     const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 70);
+    const accText = document.getElementById('accuracy-text');
+    accText.textContent = `Accuracy: ${acc}% (Need 90%)`;
+    accText.style.color = acc >= 90 ? '#4ade80' : '#f87171';
+    
+    document.getElementById('target-word-label').textContent = targetWord;
 }
 
 function getAccuracy() {
@@ -665,7 +683,6 @@ function drawEndScreen() {
     ctx.fillStyle = 'rgba(20, 83, 45, 0.94)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff';
-    // --- FIXED: End Screen Header Font Stack Fix ---
     ctx.font = 'bold 30px "Andika", "Comic Neue", sans-serif';
     ctx.textAlign = 'center';
     
@@ -677,7 +694,6 @@ function drawEndScreen() {
         ctx.fillText("Nice Try! Let's Whack Again!", canvas.width / 2, canvas.height / 2 - 20);
     }
     ctx.fillStyle = '#ffffff';
-    // --- FIXED: End Screen Score Font Stack Fix ---
     ctx.font = '20px "Andika", "Comic Neue", sans-serif';
     ctx.fillText(`Final Game Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 35);
 }
@@ -695,7 +711,6 @@ function gameLoop() {
     }
 
     drawMallet();
-    drawUI();
 
     if (gameOver) {
         drawEndScreen();
@@ -756,9 +771,11 @@ function restartGame() {
     mallet.isRed = false;
 
     resizeCanvas();
+    updateDOMHUD();
 
     timerInterval = setInterval(() => {
         timeLeft--;
+        updateDOMHUD();
         if (timeLeft <= 0) {
             gameOver = true;
             gameWon = getAccuracy() >= 90;
@@ -779,8 +796,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
 </html>
