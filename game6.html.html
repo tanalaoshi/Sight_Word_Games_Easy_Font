@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Sight Word Basketball Shootout</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,17 +12,26 @@
             margin: 0;
             padding: 0;
             background-color: #020617;
-            /* Swapped fallback stack for Comic Neue */
             font-family: 'Comic Neue', sans-serif;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* ===== LANDSCAPE / CORRECT ORIENTATION WORKSPACE ===== */
+        #main-wrapper {
+            display: flex;
+            flex-direction: column;
+            width: 100vw;
+            height: 100vh;
         }
         #game-container {
             position: relative;
             width: 100vw;
             height: 75vh;
-            min-height: 400px;
+            min-height: 280px;
             background: #1e1b4b; 
         }
         canvas {
@@ -35,7 +44,7 @@
             height: 25vh;
             background-color: #ffffff;
             box-sizing: border-box;
-            padding: 10px 15px;
+            padding: 8px 15px;
             display: flex;
             align-items: center;
             justify-content: space-around;
@@ -44,18 +53,18 @@
         .input-group {
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 3px;
         }
         label {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: bold;
             color: #333;
         }
         textarea {
             width: 45vw;
-            height: 14vh;
+            height: 15vh;
             font-family: 'Comic Neue', sans-serif;
-            font-size: 15px;
+            font-size: 14px;
             padding: 5px;
             border: 2px solid #ccc;
             border-radius: 5px;
@@ -63,9 +72,9 @@
         }
         button {
             font-family: 'Comic Neue', sans-serif;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            padding: 12px 24px;
+            padding: 10px 20px;
             background-color: #c2410c; 
             color: white;
             border: none;
@@ -77,20 +86,73 @@
             transform: translateY(4px);
             box-shadow: none;
         }
+
+        /* ===== PORTRAIT ORIENTATION FALLBACK OVERLAY ===== */
+        #orientation-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #1e1b4b;
+            color: white;
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        #orientation-overlay h2 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #f59e0b;
+        }
+        #orientation-overlay p {
+            font-size: 18px;
+            max-width: 300px;
+            line-height: 1.4;
+        }
+        .turn-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: rotateDevice 2s infinite ease-in-out;
+        }
+
+        @keyframes rotateDevice {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(-90deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+        @media (orientation: portrait) {
+            #main-wrapper { display: none; }
+            #orientation-overlay { display: flex; }
+        }
     </style>
 </head>
 <body>
 
-<div id="game-container">
-    <canvas id="gameCanvas"></canvas>
+<div id="orientation-overlay">
+    <div class="turn-icon">🔄📱</div>
+    <h2>Please Turn Your Screen</h2>
+    <p>Flip your iPad or phone sideways (Landscape Mode) to play the Basketball Shootout game!</p>
 </div>
 
-<div id="control-panel">
-    <div class="input-group">
-        <label for="wordList">Custom Words (comma-separated):</label>
-        <textarea id="wordList">the, and, a, on</textarea>
+<div id="main-wrapper">
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
     </div>
-    <button onclick="restartGame()">Update & Restart</button>
+
+    <div id="control-panel">
+        <div class="input-group">
+            <label for="wordList">Custom Words (comma-separated):</label>
+            <textarea id="wordList">the, and, a, on</textarea>
+        </div>
+        <button onclick="restartGame()">Update & Restart</button>
+    </div>
 </div>
 
 <script>
@@ -114,7 +176,6 @@ const WORD_DISPLAY_DURATION = 4500;
 let wordSwitchTimer = 0;
 let timerInterval = null;
 
-// --- NATIVE AUDIO ELEMENT ENGINE ---
 let bgMusic = null;
 let audioCtx = null; 
 
@@ -127,7 +188,7 @@ function initAudio() {
     }
     
     if (bgMusic.paused) {
-        bgMusic.play().catch(e => console.log("Audio waiting for user gesture context: ", e));
+        bgMusic.play().catch(e => console.log("Audio gesture delay: ", e));
     }
 
     if (!audioCtx) {
@@ -141,8 +202,6 @@ function initAudio() {
 function speakWord(text) {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
-        
-        // --- NATURAL PHONETIC TRANSLATOR ---
         let voiceText = text.toLowerCase().trim();
         if (voiceText === 'a') {
             voiceText = 'uh';
@@ -289,34 +348,32 @@ function playWinSound() { playSwishAndCheer(); }
 function playLoseSound() { playRimAndGroan(); }
 
 function resizeCanvas() {
-    let targetWidth = window.innerWidth || 800;
-    let targetHeight = (window.innerHeight * 0.75) || 500;
-    
     const container = document.getElementById('game-container');
-    if (container) {
-        let rect = container.getBoundingClientRect();
-        if (rect.width > 0) targetWidth = rect.width;
-        if (rect.height > 0) targetHeight = rect.height;
-    }
+    if (!container || window.innerHeight > window.innerWidth) return; 
     
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
+    let rect = container.getBoundingClientRect();
+    canvas.width = rect.width || window.innerWidth;
+    canvas.height = rect.height || (window.innerHeight * 0.75);
     
     resetHoopCoordinates();
     
     if (basketball.state === 'idle') {
         basketball.x = canvas.width / 2;
-        basketball.y = canvas.height - canvas.height * 0.1;
+        basketball.y = canvas.height - (canvas.width < 600 ? 16 : 20) - 15;
     }
 }
 window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', () => {
+    setTimeout(resizeCanvas, 200);
+});
 
 function resetHoopCoordinates() {
     const oldHoops = hoops;
     hoops = [];
     const segment = canvas.width / HOOPS_COUNT;
-    let calculatedHoopY = canvas.height * 0.18; 
-    if (canvas.height < 450) calculatedHoopY = canvas.height * 0.15;
+    // Lowered the hoops slightly down to accommodate the top clean dashboard row
+    let calculatedHoopY = canvas.height * 0.28; 
+    if (canvas.height < 450) calculatedHoopY = canvas.height * 0.25;
 
     for (let i = 0; i < HOOPS_COUNT; i++) {
         hoops.push({
@@ -333,7 +390,6 @@ function resetHoopCoordinates() {
 function populateHoops() {
     if (words.length === 0) return;
     playWhooshSound();
-    
     let randPattern = Math.random();
     
     for (let i = 0; i < HOOPS_COUNT; i++) {
@@ -453,7 +509,6 @@ function drawHoopsSystem() {
             ctx.fillRect(hX - labelW/2, h.y - 68 * scaleFactor, labelW, labelH);
             
             ctx.fillStyle = '#ffffff';
-            // Swapped hoop text font style to Comic Neue
             ctx.font = `bold ${Math.floor(13 * scaleFactor)}px "Comic Neue", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -465,10 +520,6 @@ function drawHoopsSystem() {
 
 function drawBall() {
     let radius = canvas.width < 600 ? 16 : 20;
-    if (basketball.state === 'idle') {
-        basketball.x = canvas.width / 2;
-        basketball.y = canvas.height - radius - 15;
-    }
     
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
@@ -526,9 +577,9 @@ function checkShotResult(idx) {
 }
 
 function drawUI() {
-    // Moved the Target Word block from top/middle to bottom-left corner
+    // 1. Target word remains pinned safely in the bottom-left corner
     let boxW = Math.min(180, canvas.width * 0.4);
-    let boxH = Math.min(50, canvas.height * 0.12);
+    let boxH = Math.min(45, canvas.height * 0.12);
     let targetBoxX = 15;
     let targetBoxY = canvas.height - boxH - 15;
 
@@ -544,23 +595,27 @@ function drawUI() {
     ctx.textBaseline = 'middle';
     ctx.fillText(targetWord, targetBoxX + boxW/2, targetBoxY + boxH/2);
 
-    // Main scoreboard top left panel
-    let scoreBoxW = canvas.width < 600 ? 190 : 230;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 2;
-    ctx.fillRect(15, 15, scoreBoxW, 85);
-    ctx.strokeRect(15, 15, scoreBoxW, 85);
+    // 2. NEW STATUS BAR: Replaced old top-left box with a full width thin overlay strip
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+    ctx.fillRect(0, 0, canvas.width, 34);
 
-    ctx.fillStyle = '#334155';
-    ctx.font = 'bold 14px "Comic Neue", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Timer: ${timeLeft}s`, 25, 35);
-    ctx.fillText(`Score: ${correctTaps}   Miss: ${incorrectTaps}`, 25, 55);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 13px "Comic Neue", sans-serif';
+    ctx.textBaseline = 'middle';
     
+    // Left-aligned Timer metrics
+    ctx.textAlign = 'left';
+    ctx.fillText(`⏱️ Timer: ${timeLeft}s`, 15, 17);
+
+    // Center-aligned Score indicators
+    ctx.textAlign = 'center';
+    ctx.fillText(`🏀 Score: ${correctTaps}   ❌ Miss: ${incorrectTaps}`, canvas.width / 2, 17);
+
+    // Right-aligned Accuracy readout
+    ctx.textAlign = 'right';
     const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+    ctx.fillStyle = acc >= 90 ? '#4ade80' : '#f87171';
+    ctx.fillText(`🎯 Accuracy: ${acc}%`, canvas.width - 15, 17);
 }
 
 function getAccuracy() {
@@ -588,6 +643,11 @@ function drawEndScreen() {
 }
 
 function gameLoop() {
+    if (window.innerHeight > window.innerWidth) {
+        requestAnimationFrame(gameLoop);
+        return; 
+    }
+
     if (!gameOver && Date.now() - wordSwitchTimer >= WORD_DISPLAY_DURATION) {
         populateHoops();
     }
@@ -614,7 +674,7 @@ function gameLoop() {
 
 function handleInput(clientX, clientY) {
     initAudio(); 
-    if (gameOver || basketball.state === 'flying') return;
+    if (gameOver || basketball.state === 'flying' || window.innerHeight > window.innerWidth) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
@@ -671,6 +731,7 @@ function restartGame() {
     populateHoops();
 
     timerInterval = setInterval(() => {
+        if (window.innerHeight > window.innerWidth) return; 
         timeLeft--;
         if (timeLeft <= 0) {
             gameOver = true;
@@ -691,4 +752,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html> 
+</html>
