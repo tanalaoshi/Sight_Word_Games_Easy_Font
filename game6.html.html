@@ -20,7 +20,6 @@
             height: 100vh;
         }
 
-        /* ===== LANDSCAPE / CORRECT ORIENTATION WORKSPACE ===== */
         #main-wrapper {
             display: flex;
             flex-direction: column;
@@ -86,60 +85,9 @@
             transform: translateY(4px);
             box-shadow: none;
         }
-
-        /* ===== PORTRAIT ORIENTATION FALLBACK OVERLAY ===== */
-        #orientation-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: #1e1b4b;
-            color: white;
-            z-index: 9999;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            box-sizing: border-box;
-            text-align: center;
-        }
-        #orientation-overlay h2 {
-            font-size: 28px;
-            margin-bottom: 10px;
-            color: #f59e0b;
-        }
-        #orientation-overlay p {
-            font-size: 18px;
-            max-width: 300px;
-            line-height: 1.4;
-        }
-        .turn-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-            animation: rotateDevice 2s infinite ease-in-out;
-        }
-
-        @keyframes rotateDevice {
-            0% { transform: rotate(0deg); }
-            50% { transform: rotate(-90deg); }
-            100% { transform: rotate(0deg); }
-        }
-
-        @media (orientation: portrait) {
-            #main-wrapper { display: none; }
-            #orientation-overlay { display: flex; }
-        }
     </style>
 </head>
 <body>
-
-<div id="orientation-overlay">
-    <div class="turn-icon">🔄📱</div>
-    <h2>Please Turn Your Screen</h2>
-    <p>Flip your iPad or phone sideways (Landscape Mode) to play the Basketball Shootout game!</p>
-</div>
 
 <div id="main-wrapper">
     <div id="game-container">
@@ -358,7 +306,7 @@ function resetBallToFloor() {
 
 function resizeCanvas() {
     const container = document.getElementById('game-container');
-    if (!container || window.innerHeight > window.innerWidth) return; 
+    if (!container) return; 
     
     let rect = container.getBoundingClientRect();
     canvas.width = rect.width || window.innerWidth;
@@ -551,13 +499,13 @@ function drawBall() {
 
 function updateBallMotion() {
     if (basketball.state === 'flying') {
-        basketball.progress += 0.045; // Smooth arc movement speed
+        basketball.progress += 0.045; 
         
         if (basketball.progress >= 1) {
             basketball.progress = 1;
             let targetIdx = basketball.targetHoopIdx;
             checkShotResult(targetIdx);
-            resetBallToFloor(); // Crucial Fix: Immediately pop the ball back down
+            resetBallToFloor(); 
             return;
         }
         
@@ -612,15 +560,15 @@ function drawUI() {
     ctx.textBaseline = 'middle';
     
     ctx.textAlign = 'left';
-    ctx.fillText(`⏱️ Timer: ${timeLeft}s`, 15, 17);
+    ctx.fillText(`⏱️ ${timeLeft}s`, 15, 17);
 
     ctx.textAlign = 'center';
-    ctx.fillText(`🏀 Score: ${correctTaps}   ❌ Miss: ${incorrectTaps}`, canvas.width / 2, 17);
+    ctx.fillText(`🏀 ${correctTaps}   ❌ ${incorrectTaps}`, canvas.width / 2, 17);
 
     ctx.textAlign = 'right';
     const acc = getAccuracy();
     ctx.fillStyle = acc >= 90 ? '#4ade80' : '#f87171';
-    ctx.fillText(`🎯 Accuracy: ${acc}%`, canvas.width - 15, 17);
+    ctx.fillText(`🎯 ${acc}%`, canvas.width - 15, 17);
 }
 
 function getAccuracy() {
@@ -648,11 +596,6 @@ function drawEndScreen() {
 }
 
 function gameLoop() {
-    if (window.innerHeight > window.innerWidth) {
-        requestAnimationFrame(gameLoop);
-        return; 
-    }
-
     if (!gameOver && Date.now() - wordSwitchTimer >= WORD_DISPLAY_DURATION) {
         populateHoops();
     }
@@ -679,7 +622,7 @@ function gameLoop() {
 
 function handleInput(clientX, clientY) {
     initAudio(); 
-    if (gameOver || basketball.state === 'flying' || window.innerHeight > window.innerWidth) return;
+    if (gameOver || basketball.state === 'flying') return;
 
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
@@ -735,7 +678,6 @@ function restartGame() {
     populateHoops();
 
     timerInterval = setInterval(() => {
-        if (window.innerHeight > window.innerWidth) return; 
         timeLeft--;
         if (timeLeft <= 0) {
             gameOver = true;
