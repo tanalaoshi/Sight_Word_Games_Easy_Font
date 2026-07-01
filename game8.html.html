@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Sight Word Duck Pond</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -361,7 +350,7 @@ function resetDuckCoordinates() {
     const oldDucks = ducks;
     ducks = [];
     const segment = canvas.width / DUCK_COUNT;
-    let calculatedY = canvas.height * 0.32; 
+    let calculatedY = canvas.height * 0.40; // Pushed down slightly to give top UI breathing room
 
     for (let i = 0; i < DUCK_COUNT; i++) {
         ducks.push({
@@ -369,7 +358,7 @@ function resetDuckCoordinates() {
             baseY: calculatedY,
             x: (segment * i) + (segment / 2),
             y: calculatedY,
-            swimOffset: Math.random() * 100, // randomized phase
+            swimOffset: Math.random() * 100,
             word: oldDucks[i] ? oldDucks[i].word : '',
             isTarget: oldDucks[i] ? oldDucks[i].isTarget : false,
             wasHit: oldDucks[i] ? oldDucks[i].wasHit : false,
@@ -438,11 +427,9 @@ class PopParticle {
 }
 
 function drawPondBackground() {
-    // Beautiful deep water lake
     ctx.fillStyle = '#0284c7'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Gentle water ripple textures
     ctx.strokeStyle = '#0ea5e9';
     ctx.lineWidth = 2;
     let loopTime = Date.now() * 0.001;
@@ -454,27 +441,25 @@ function drawPondBackground() {
         ctx.stroke();
     }
 
-    // Render Cute Lily Pads and Blooms
     lilyPads.forEach(pad => {
         ctx.save();
         ctx.translate(pad.x, pad.y);
-        ctx.fillStyle = '#15803d'; // Rich lilypad green
+        ctx.fillStyle = '#15803d'; 
         ctx.beginPath();
-        // Draw circle with a wedge cut out for classic lilypad look
         ctx.arc(0, 0, pad.size, 0.4, Math.PI * 2 - 0.4);
         ctx.lineTo(0,0);
         ctx.closePath();
         ctx.fill();
 
         if (pad.hasFlower) {
-            ctx.fillStyle = '#f472b6'; // Pretty pink lotus bloom
+            ctx.fillStyle = '#f472b6'; 
             for(let f=0; f<5; f++) {
                 ctx.rotate(Math.PI / 2.5);
                 ctx.beginPath();
                 ctx.ellipse(pad.size*0.4, 0, pad.size*0.3, pad.size*0.15, 0, 0, Math.PI*2);
                 ctx.fill();
             }
-            ctx.fillStyle = '#facc15'; // yellow center
+            ctx.fillStyle = '#facc15'; 
             ctx.beginPath();
             ctx.arc(0, 0, pad.size*0.18, 0, Math.PI*2);
             ctx.fill();
@@ -489,8 +474,6 @@ function drawDucks() {
     let time = Date.now();
 
     ducks.forEach(d => {
-        // --- SWIMMING MOTIONS LOGIC ---
-        // Ducks slide smoothly in small circles around their base coordinates
         let phase = time * 0.002 + d.swimOffset;
         let swimX = Math.cos(phase) * 15;
         let swimY = Math.sin(phase * 1.5) * 8;
@@ -510,26 +493,22 @@ function drawDucks() {
         ctx.save();
         ctx.translate(d.x, d.y);
 
-        // Water ripple ring underneath the floating duck body
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.ellipse(0, 15*scaleFactor, 25*scaleFactor, 8*scaleFactor, 0, 0, Math.PI*2);
+        ctx.ellipse(0, 15*scaleFactor, 25*scaleFactor, 8*scaleFactor, 0, 0, Math.PI * 2);
         ctx.stroke();
 
-        // 1. Duck Plump Floating Body (Horizontal orientation ellipse)
-        ctx.fillStyle = '#facc15'; // Vibrant sunny duckling yellow
+        ctx.fillStyle = '#facc15'; 
         ctx.beginPath();
         ctx.ellipse(0, 0, 24 * scaleFactor, 16 * scaleFactor, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 2. Wing overlay
         ctx.fillStyle = '#eab308';
         ctx.beginPath();
         ctx.ellipse(-4 * scaleFactor, -2 * scaleFactor, 12 * scaleFactor, 7 * scaleFactor, 0.1, 0, Math.PI * 2);
         ctx.fill();
 
-        // 3. Upturned Fluffy Tail feathers
         ctx.fillStyle = '#facc15';
         ctx.beginPath();
         ctx.moveTo(-22 * scaleFactor, -4 * scaleFactor);
@@ -538,39 +517,32 @@ function drawDucks() {
         ctx.closePath();
         ctx.fill();
 
-        // 4. Round Duck Head
         ctx.fillStyle = '#facc15';
         ctx.beginPath();
         ctx.arc(16 * scaleFactor, -15 * scaleFactor, 13 * scaleFactor, 0, Math.PI * 2);
         ctx.fill();
 
-        // 5. Cute Small Eye
         ctx.fillStyle = '#1e293b';
         ctx.beginPath();
         ctx.arc(19 * scaleFactor, -18 * scaleFactor, 2.5 * scaleFactor, 0, Math.PI * 2);
         ctx.fill();
 
-        // --- SPECIFIC HORIZONTAL DUCK BEAK ENGINE ---
-        ctx.fillStyle = '#f97316'; // Bright orange duck beak
+        ctx.fillStyle = '#f97316'; 
         ctx.strokeStyle = '#c2410c';
         ctx.lineWidth = 1.5;
 
-        let hX = 26 * scaleFactor;  // Head attachment point X
-        let bLen = 14 * scaleFactor; // Length of beak outward right
+        let hX = 26 * scaleFactor;  
+        let bLen = 14 * scaleFactor; 
 
         if (d.munchTimer > 0) {
-            // Rapid vertical snapping scissor crunch sequence
             let snapPhase = Math.floor(time / 100) % 2;
             if (snapPhase === 0) {
-                // Beak Opened wide
-                // Top bill
                 ctx.beginPath();
                 ctx.moveTo(hX, -16 * scaleFactor);
                 ctx.lineTo(hX + bLen, -21 * scaleFactor);
                 ctx.lineTo(hX + 4*scaleFactor, -13 * scaleFactor);
                 ctx.closePath();
                 ctx.fill(); ctx.stroke();
-                // Bottom bill
                 ctx.beginPath();
                 ctx.moveTo(hX + 4*scaleFactor, -13 * scaleFactor);
                 ctx.lineTo(hX + bLen - 2*scaleFactor, -9 * scaleFactor);
@@ -578,7 +550,6 @@ function drawDucks() {
                 ctx.closePath();
                 ctx.fill(); ctx.stroke();
             } else {
-                // Beak tightly shut closed line flat
                 ctx.beginPath();
                 ctx.moveTo(hX, -15 * scaleFactor);
                 ctx.lineTo(hX + bLen, -15 * scaleFactor);
@@ -587,7 +558,6 @@ function drawDucks() {
                 ctx.fill(); ctx.stroke();
             }
         } else {
-            // Normal static sweet duck bill flat profile shape
             ctx.beginPath();
             ctx.moveTo(hX, -16 * scaleFactor);
             ctx.quadraticCurveTo(hX + bLen, -18 * scaleFactor, hX + bLen, -14 * scaleFactor);
@@ -599,7 +569,6 @@ function drawDucks() {
 
         ctx.restore();
 
-        // Word signboard cards
         if (!d.wasHit) {
             ctx.save();
             let labelW = 90 * scaleFactor;
@@ -607,7 +576,6 @@ function drawDucks() {
             ctx.fillStyle = '#ffffff'; 
             ctx.strokeStyle = '#0369a1';
             ctx.lineWidth = 2;
-            // Placed squarely above the swimming coordinate center
             ctx.fillRect(d.x - labelW/2, d.baseY - 55 * scaleFactor, labelW, labelH);
             ctx.strokeRect(d.x - labelW/2, d.baseY - 55 * scaleFactor, labelW, labelH);
             
@@ -630,7 +598,6 @@ function drawBreadProjectile() {
     }
     
     ctx.save();
-    // Shadow under bread piece
     ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.beginPath();
     ctx.ellipse(bread.x, canvas.height - 15, radius * 1.2 * (bread.y / canvas.height), 4, 0, 0, Math.PI * 2);
@@ -639,11 +606,10 @@ function drawBreadProjectile() {
     ctx.translate(bread.x, bread.y);
     ctx.rotate(bread.rotation);
     
-    // Golden baked bread cube loaf slice style
-    ctx.fillStyle = '#b45309'; // crust outline
+    ctx.fillStyle = '#b45309'; 
     ctx.fillRect(-radius, -radius, radius*2, radius*2);
     
-    ctx.fillStyle = '#fef08a'; // soft bread interior crumb center
+    ctx.fillStyle = '#fef08a'; 
     ctx.fillRect(-radius + 2, -radius + 2, radius*2 - 4, radius*2 - 4);
 
     ctx.restore();
@@ -677,12 +643,11 @@ function checkBreadResult(idx) {
         speakWord(targetWord);
         playQuackSound();
         
-        // Dynamic bread crumb shatter splash particle effect
         for (let i = 0; i < 6; i++) {
-            activeParticles.push(new PopParticle(d.x, d.y, '#38bdf8', 'splash')); // water drop bursts
+            activeParticles.push(new PopParticle(d.x, d.y, '#38bdf8', 'splash'));
         }
         for (let i = 0; i < 15; i++) {
-            activeParticles.push(new PopParticle(d.x, d.y, '#fef08a', 'crumb')); // floating bread bits
+            activeParticles.push(new PopParticle(d.x, d.y, '#fef08a', 'crumb'));
         }
     } else {
         incorrectTaps++;
@@ -695,40 +660,51 @@ function checkBreadResult(idx) {
 }
 
 function drawUI() {
-    let duckY = ducks[0] ? ducks[0].baseY : canvas.height * 0.32;
-    let targetBoxY = duckY + canvas.height * 0.18; 
-    
-    let boxW = Math.min(220, canvas.width * 0.5);
-    let boxH = Math.min(50, canvas.height * 0.12);
+    // --- 1. TARGET WORD PANEL (Relocated to Top Center) ---
+    let boxW = Math.min(220, canvas.width * 0.45);
+    let boxH = 44;
+    let boxX = canvas.width / 2 - boxW / 2;
+    let boxY = 15;
 
+    ctx.save();
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#0284c7';
+    ctx.strokeStyle = '#facc15'; // Bright golden trim
     ctx.lineWidth = 4;
-    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
-    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.lineJoin = 'round';
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-    ctx.fillStyle = '#0369a1';
-    ctx.font = `bold ${boxH * 0.55}px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif`;
+    ctx.fillStyle = '#0c4a6e';
+    ctx.font = `bold 22px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+    ctx.fillText(targetWord, canvas.width / 2, boxY + boxH / 2);
+    ctx.restore();
 
-    let scoreBoxW = canvas.width < 600 ? 190 : 230;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-    ctx.strokeStyle = '#7dd3fc';
-    ctx.lineWidth = 2;
-    ctx.fillRect(15, 15, scoreBoxW, 85);
-    ctx.strokeRect(15, 15, scoreBoxW, 85);
-
-    ctx.fillStyle = '#0369a1';
-    ctx.font = 'bold 14px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 35);
-    ctx.fillText(`Fed Ducks: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 55);
+    // --- 2. STREAMLINED UI HEADER (Clean, out-of-the-way text elements) ---
+    ctx.save();
+    ctx.font = 'bold 15px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.textBaseline = 'top';
     
+    // Drop shadow simulation for legibility over water ripples
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+
+    // Top Left: Simple Timer
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(`⏱️ Time: ${timeLeft}s`, 15, 18);
+
+    // Top Right: Compact Stats & Accuracy
+    ctx.textAlign = 'right';
     const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+    ctx.fillText(`🦆 Fed: ${correctTaps}  |  ❌ Miss: ${incorrectTaps}`, canvas.width - 15, 18);
+    
+    ctx.fillStyle = acc >= 90 ? '#4ade80' : '#f87171';
+    ctx.fillText(`🎯 Acc: ${acc}%`, canvas.width - 15, 38);
+    ctx.restore();
 }
 
 function getAccuracy() {
@@ -792,7 +768,6 @@ function handleInput(clientX, clientY) {
 
     for (let i = 0; i < DUCK_COUNT; i++) {
         let d = ducks[i];
-        // Target hitbox tracking the dynamic swimming coordinates smoothly
         if (x >= d.x - hitRange && x <= d.x + hitRange && y >= d.y - 45 && y <= d.y + 40) {
             if (d.wasHit) break; 
             
@@ -863,8 +838,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
 </html>
