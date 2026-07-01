@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Sight Word Basketball Shootout</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -537,25 +526,25 @@ function checkShotResult(idx) {
 }
 
 function drawUI() {
-    let hoopY = hoops[0] ? hoops[0].y : canvas.height * 0.18;
-    let targetBoxY = hoopY + canvas.height * 0.15; 
-    
-    let boxW = Math.min(220, canvas.width * 0.5);
+    // Moved the Target Word block from top/middle to bottom-left corner
+    let boxW = Math.min(180, canvas.width * 0.4);
     let boxH = Math.min(50, canvas.height * 0.12);
+    let targetBoxX = 15;
+    let targetBoxY = canvas.height - boxH - 15;
 
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#c2410c';
     ctx.lineWidth = 3;
-    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
-    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.fillRect(targetBoxX, targetBoxY, boxW, boxH);
+    ctx.strokeRect(targetBoxX, targetBoxY, boxW, boxH);
 
     ctx.fillStyle = '#1e293b';
-    // Swapped target box word font structure to Comic Neue
-    ctx.font = `bold ${boxH * 0.6}px "Comic Neue", sans-serif`;
+    ctx.font = `bold ${boxH * 0.55}px "Comic Neue", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+    ctx.fillText(targetWord, targetBoxX + boxW/2, targetBoxY + boxH/2);
 
+    // Main scoreboard top left panel
     let scoreBoxW = canvas.width < 600 ? 190 : 230;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.strokeStyle = '#cbd5e1';
@@ -564,7 +553,6 @@ function drawUI() {
     ctx.strokeRect(15, 15, scoreBoxW, 85);
 
     ctx.fillStyle = '#334155';
-    // Swapped upper scorecard values font styling to Comic Neue
     ctx.font = 'bold 14px "Comic Neue", sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`Timer: ${timeLeft}s`, 25, 35);
@@ -584,7 +572,6 @@ function drawEndScreen() {
     ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff';
-    // Swapped endgame heading layout font to Comic Neue
     ctx.font = 'bold 32px "Comic Neue", sans-serif';
     ctx.textAlign = 'center';
     
@@ -596,7 +583,6 @@ function drawEndScreen() {
         ctx.fillText("Good Try! Practice More!", canvas.width / 2, canvas.height / 2 - 20);
     }
     ctx.fillStyle = '#ffffff';
-    // Swapped endgame accuracy metric font to Comic Neue
     ctx.font = '20px "Comic Neue", sans-serif';
     ctx.fillText(`Final Shootout Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 30);
 }
@@ -705,8 +691,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
-</html>
+</html> 
