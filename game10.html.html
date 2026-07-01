@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Ending Sound Fishing</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Phonics Summer Fishing Hole</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0284c7;
+            /* Prioritizes hyper-legible educational fonts over basic system defaults */
+            font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 75vh;
+            min-height: 400px;
+            background: #0ea5e9; 
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Audio Unlock Overlay */
+        #audio-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(14, 165, 233, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            color: white;
+            text-align: center;
+        }
+        #audio-overlay h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #facc15;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #start-audio-btn {
+            font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 22px;
+            font-weight: bold;
+            padding: 15px 40px;
+            background-color: #f43f5e;
+            color: #ffffff;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #be123c;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        #start-audio-btn:active {
+            transform: translateY(6px) scale(1);
+            box-shadow: none;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 25vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #f43f5e;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 45vw;
+            height: 14vh;
+            font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 14px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #f43f5e; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #be123c;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="audio-overlay">
+        <h1>🌞 Phonics Summer Fishing Hole 🐟</h1>
+        <button id="start-audio-btn" onclick="startWithAudio()">TAP TO FISH IN THE SUN!</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Target Phonics Words (-ff, -ss, -ll, -ck):</label>
+        <textarea id="wordList">cuff, huff, puff, muff, ruff, moss, boss, kiss, pass, bell, tall, yell, hill, duck, rock, sock, luck, kick, pack</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let phonicsWords = [];
+let targetPattern = ''; 
+const PATTERNS = ['ff', 'ss', 'll', 'ck'];
+
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let gameOver = false;
+let gameWon = false;
+
+// --- FISHING SPOTS ---
+const SPOT_COUNT = 6;
+let spots = [];
+
+// --- NET ANIMATION ENGINE ---
+let net = {
+    x: 0, y: 0,
+    startX: 0, startY: 0,
+    targetX: 0, targetY: 0,
+    progress: 1,
+    state: 'idle', // 'idle', 'swooping', 'scooping', 'shaking'
+    scoopTimer: 0,
+    shakeTimer: 0,
+    isRed: false
+};
+
+// Barrel tracking for fish colors caught
+let caughtFishColors = [];
+
+let activeParticles = [];
+let timerInterval = null;
+
+// --- SUMMER MUSIC SYNTHESIZER ---
+let audioCtx = null;
+let musicInterval = null;
+let currentBeat = 0;
+
+function startWithAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    document.getElementById('audio-overlay').style.display = 'none';
+
+    if (!musicInterval) {
+        musicInterval = setInterval(playSummerMusicScheduler, 250); 
+    }
+    announceTarget();
+}
+
+function initAudioContextOnly() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playSummerMusicScheduler() {
+    if (!audioCtx || gameOver) return;
+    let t = audioCtx.currentTime;
+
+    // Soft warm beach synth bass
+    let bassOsc = audioCtx.createOscillator();
+    let bassGain = audioCtx.createGain();
+    bassOsc.type = 'triangle';
+    let beachNotes = [130.81, 146.83, 164.81, 196.00];
+    bassOsc.frequency.setValueAtTime(beachNotes[currentBeat % 4], t);
+    bassGain.gain.setValueAtTime(0.25, t);
+    bassGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    bassOsc.connect(bassGain);
+    bassGain.connect(audioCtx.destination);
+    bassOsc.start(t);
+    bassOsc.stop(t + 0.22);
+
+    // High Steel Drum / Marimba upbeat melody accent
+    if (currentBeat % 2 === 0) {
+        let marimbaOsc = audioCtx.createOscillator();
+        let marimbaGain = audioCtx.createGain();
+        marimbaOsc.type = 'sine';
+        let melody = [523.25, 587.33, 659.25, 783.99, 880.00, 783.99, 659.25, 587.33];
+        marimbaOsc.frequency.setValueAtTime(melody[(currentBeat / 2) % melody.length], t);
+        marimbaGain.gain.setValueAtTime(0.07, t);
+        marimbaGain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        marimbaOsc.connect(marimbaGain);
+        marimbaGain.connect(audioCtx.destination);
+        marimbaOsc.start(t);
+        marimbaOsc.stop(t + 0.14);
+    }
+
+    currentBeat = (currentBeat + 1) % 16;
+}
+
+function announceTarget() {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        let phrase = `Find words ending in ${targetPattern === 'ck' ? 'c k' : targetPattern.split('').join(' ')}`;
+        const utterance = new SpeechSynthesisUtterance(phrase);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playSplashSound() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    
+    let bufferSize = audioCtx.sampleRate * 0.15;
+    let buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    let noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    
+    let filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(400, t);
+    filter.frequency.linearRampToValueAtTime(1000, t + 0.1);
+
+    let gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(t);
+    noise.stop(t + 0.15);
+}
+
+function playErrorBuzz() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(130, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.26);
+}
+
+function resizeCanvas() {
+    let targetWidth = window.innerWidth || 800;
+    let targetHeight = (window.innerHeight * 0.75) || 500;
+    
+    const container = document.getElementById('game-container');
+    if (container) {
+        let rect = container.getBoundingClientRect();
+        if (rect.width > 0) targetWidth = rect.width;
+        if (rect.height > 0) targetHeight = rect.height;
+    }
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    initSpots();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function initSpots() {
+    spots = [];
+    const cols = 3;
+    const rows = 2;
+    const cellW = canvas.width / cols;
+    const cellH = (canvas.height * 0.55) / rows;
+    const startY = canvas.height * 0.22;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            let stagger = (r % 2 === 1) ? cellW * 0.12 : -cellW * 0.12;
+            spots.push({
+                x: (cellW * c) + (cellW / 2) + stagger,
+                y: startY + (cellH * r) + (cellH / 2),
+                fishState: 'down', 
+                fishYOffset: 0, 
+                word: '',
+                color: '#ef4444',
+                isMatch: false,
+                stateTimer: 0,
+                nextActionTime: Date.now() + Math.random() * 1500
+            });
+        }
+    }
+}
+
+function updateFish() {
+    if (gameOver) return;
+    const time = Date.now();
+
+    spots.forEach(s => {
+        switch (s.fishState) {
+            case 'down':
+                if (time >= s.nextActionTime) {
+                    s.fishState = 'upping';
+                    assignWordToFish(s);
+                }
+                break;
+            case 'upping':
+                s.fishYOffset += 0.08;
+                if (s.fishYOffset >= 1) {
+                    s.fishYOffset = 1;
+                    s.fishState = 'up';
+                    s.stateTimer = time + 2500 + Math.random() * 1500;
+                }
+                break;
+            case 'up':
+                if (time >= s.stateTimer) {
+                    s.fishState = 'downing';
+                }
+                break;
+            case 'downing':
+                s.fishYOffset -= 0.06;
+                if (s.fishYOffset <= 0) {
+                    s.fishYOffset = 0;
+                    s.fishState = 'down';
+                    s.nextActionTime = time + 800 + Math.random() * 2500;
+                }
+                break;
+            case 'caught':
+                s.fishYOffset -= 0.15;
+                if (s.fishYOffset <= 0) {
+                    s.fishYOffset = 0;
+                    s.fishState = 'down';
+                    s.nextActionTime = time + 2000 + Math.random() * 2000;
+                }
+                break;
+        }
+    });
+}
+
+function assignWordToFish(spot) {
+    if (phonicsWords.length === 0) return;
+
+    let matches = phonicsWords.filter(w => w.endsWith(targetPattern));
+    let nonMatches = phonicsWords.filter(w => !w.endsWith(targetPattern));
+
+    let wantMatch = Math.random() < 0.45 || matches.length === 0;
+    
+    if (wantMatch && matches.length > 0) {
+        spot.word = matches[Math.floor(Math.random() * matches.length)];
+        spot.isMatch = true;
+    } else if (nonMatches.length > 0) {
+        spot.word = nonMatches[Math.floor(Math.random() * nonMatches.length)];
+        spot.isMatch = false;
+    } else {
+        spot.word = phonicsWords[Math.floor(Math.random() * phonicsWords.length)];
+        spot.isMatch = spot.word.endsWith(targetPattern);
+    }
+
+    const colors = ['#f97316', '#eab308', '#ec4899', '#a855f7', '#34d399'];
+    spot.color = colors[Math.floor(Math.random() * colors.length)];
+}
+
+class WaterParticle {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.vx = (Math.random() - 0.5) * 7;
+        this.vy = -Math.random() * 5 - 3;
+        this.radius = Math.random() * 5 + 2;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.05 + 0.04;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = '#e0f2fe';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.vy += 0.25; 
+        this.alpha -= this.decay;
+    }
+}
+
+function drawWaterHoles() {
+    ctx.fillStyle = '#0ea5e9';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let scale = canvas.width < 600 ? 0.75 : 1.0;
+    let rX = 60 * scale;
+    let rY = 18 * scale;
+
+    spots.forEach(s => {
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y + 12, rX, rY, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (s.fishYOffset > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(s.x - rX - 20, s.y - 110*scale, (rX + 20)*2, 122*scale);
+            ctx.clip();
+
+            let fishY = s.y + 12 - (s.fishYOffset * 55 * scale);
+            let wiggle = Math.sin(Date.now() * 0.02 + s.x) * 4 * scale;
+
+            ctx.save();
+            ctx.translate(s.x, fishY);
+
+            ctx.fillStyle = s.color;
+            ctx.beginPath();
+            ctx.moveTo(-15*scale, 5*scale + wiggle);
+            ctx.lineTo(-32*scale, -5*scale + wiggle);
+            ctx.lineTo(-32*scale, 15*scale + wiggle);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(0, 5*scale, 22*scale, 15*scale, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(10*scale, 0, 4.5*scale, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(11*scale, 0, 2*scale, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.restore();
+            ctx.restore(); 
+
+            ctx.save();
+            let labelW = 85 * scale;
+            let labelH = 22 * scale;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 2;
+            let textY = fishY - 14*scale;
+            ctx.fillRect(s.x - labelW/2, textY - labelH/2, labelW, labelH);
+            ctx.strokeRect(s.x - labelW/2, textY - labelH/2, labelW, labelH);
+
+            ctx.fillStyle = '#0c4a6e';
+            // --- FIXED: Integrated explicit clean font stack onto fish labels ---
+            ctx.font = `bold ${Math.floor(14 * scale)}px "Andika", "Comic Neue", "Comic Sans MS", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(s.word, s.x, textY);
+            ctx.restore();
+        }
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 3 * scale;
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y + 12, rX, rY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    });
+}
+
+function updateNetMotion() {
+    if (net.state === 'swooping') {
+        net.progress += 0.12;
+        if (net.progress >= 1) {
+            net.progress = 1;
+            if (net.isRed) {
+                net.state = 'shaking';
+                net.shakeTimer = 400;
+            } else {
+                net.state = 'scooping';
+                net.scoopTimer = 0;
+            }
+        }
+        net.x = net.startX + (net.targetX - net.startX) * net.progress;
+        net.y = net.startY + (net.targetY - net.startY) * net.progress;
+    } else if (net.state === 'scooping') {
+        net.scoopTimer += 0.15;
+        if (net.scoopTimer >= Math.PI) {
+            net.state = 'idle';
+        }
+    } else if (net.state === 'shaking') {
+        net.shakeTimer -= 16;
+        if (net.shakeTimer <= 0) {
+            net.state = 'idle';
+            net.isRed = false;
+        }
+    } else {
+        net.x = canvas.width * 0.2;
+        net.y = canvas.height - 35;
+    }
+}
+
+function drawNetAndBarrel() {
+    let scale = canvas.width < 600 ? 0.8 : 1.0;
+
+    // --- WOODEN CATCH BARREL ---
+    let bX = canvas.width - 70 * scale;
+    let bY = canvas.height - 65 * scale;
+    let bW = 55 * scale;
+    let bH = 70 * scale;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(bX - 4, bY, bW + 8, bH);
+
+    ctx.fillStyle = '#a16207';
+    ctx.fillRect(bX, bY, bW, bH);
+
+    // --- ACCUMULATING CARTOON FISH PILE ---
+    ctx.save();
+    // Clip drawing area inside the bucket opening
+    ctx.beginPath();
+    ctx.rect(bX + 2, bY + 4, bW - 4, bH - 6);
+    ctx.clip();
+
+    let fishCount = caughtFishColors.length;
+    for (let i = 0; i < fishCount; i++) {
+        let fColor = caughtFishColors[i];
+        
+        let row = Math.floor(i / 3);
+        let col = i % 3;
+        
+        let posX = bX + 10 * scale + (col * 15 * scale) + (row % 2 * 5 * scale);
+        let posY = bY + bH - 12 * scale - (row * 10 * scale);
+
+        if (posY > bY + 2) {
+            ctx.save();
+            ctx.translate(posX, posY);
+            ctx.fillStyle = fColor;
+            
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 10 * scale, 6 * scale, Math.sin(i), 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(3 * scale, -1 * scale, 2.5 * scale, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(3.5 * scale, -1 * scale, 1 * scale, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = fColor;
+            ctx.beginPath();
+            ctx.moveTo(-8 * scale, 0);
+            ctx.lineTo(-13 * scale, -4 * scale);
+            ctx.lineTo(-13 * scale, 4 * scale);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+    }
+    ctx.restore();
+
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 3 * scale;
+    ctx.strokeRect(bX, bY, bW, bH);
+    ctx.beginPath();
+    ctx.moveTo(bX, bY + bH*0.33); ctx.lineTo(bX + bW, bY + bH*0.33);
+    ctx.moveTo(bX, bY + bH*0.66); ctx.lineTo(bX + bW, bY + bH*0.66);
+    ctx.stroke();
+    ctx.restore();
+
+    // --- FISHING NET ---
+    ctx.save();
+    let rX = net.x;
+    let rY = net.y;
+    let rotation = 0.2;
+
+    if (net.state === 'scooping') {
+        rotation = 0.2 + Math.sin(net.scoopTimer) * 0.9;
+    } else if (net.state === 'shaking') {
+        rX += Math.sin(Date.now() * 0.1) * 5;
+        rY += Math.cos(Date.now() * 0.1) * 5;
+    }
+    ctx.translate(rX, rY);
+    ctx.rotate(rotation);
+
+    let rimColor = net.isRed ? '#ef4444' : '#facc15';
+
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-40 * scale, 35 * scale);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(224, 242, 254, 0.4)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, -10*scale, 20*scale, 12*scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = rimColor;
+    ctx.lineWidth = 4 * scale;
+    ctx.beginPath();
+    ctx.ellipse(0, -10*scale, 20*scale, 12*scale, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+}
+
+function handleWhackAttempt(idx, clickedSpot) {
+    net.startX = net.x;
+    net.startY = net.y;
+    net.targetX = clickedSpot.x;
+    net.targetY = clickedSpot.y;
+    net.progress = 0;
+
+    if (clickedSpot.word.endsWith(targetPattern)) {
+        correctTaps++;
+        clickedSpot.fishState = 'caught';
+        net.isRed = false;
+        net.state = 'swooping';
+        
+        caughtFishColors.push(clickedSpot.color);
+
+        playSplashSound();
+        speakWord(clickedSpot.word);
+
+        for (let i = 0; i < 15; i++) {
+            activeParticles.push(new WaterParticle(clickedSpot.x, clickedSpot.y + 10));
+        }
+    } else {
+        incorrectTaps++;
+        clickedSpot.shakeTimer = 400;
+        net.isRed = true;
+        net.state = 'swooping';
+        playErrorBuzz();
+    }
+}
+
+function drawUI() {
+    let boxW = Math.min(240, canvas.width * 0.53);
+    let boxH = 46;
+    let boxY = 15;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 4;
+    ctx.fillRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
+    ctx.strokeRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
+
+    ctx.fillStyle = '#be123c';
+    // --- FIXED: Target Text Heading Font Fix ---
+    ctx.font = 'bold 22px "Andika", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`CATCH: -${targetPattern}`, canvas.width / 2, boxY + boxH/2);
+
+    let scoreBoxW = canvas.width < 600 ? 180 : 210;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 2;
+    ctx.fillRect(15, 15, scoreBoxW, 75);
+    ctx.strokeRect(15, 15, scoreBoxW, 75);
+
+    ctx.fillStyle = '#0c4a6e';
+    // --- FIXED: Score HUD Panel Font Fix ---
+    ctx.font = 'bold 13px "Andika", "Comic Neue", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 34);
+    ctx.fillText(`Caught: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 54);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 70);
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    return total === 0 ? 100 : Math.round((correctTaps / total) * 100);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(12, 74, 110, 0.95)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    // --- FIXED: Game End Title Font Fix ---
+    ctx.font = 'bold 28px "Andika", "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#facc15';
+        ctx.fillText("🏆 Master Angler Phonics Champion! 🏆", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Splendid Effort! Let's Fish Again!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    // --- FIXED: Game End Summary Score Font Fix ---
+    ctx.font = '20px "Andika", "Comic Neue", sans-serif';
+    ctx.fillText(`Final Net Catch Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 35);
+}
+
+function gameLoop() {
+    updateFish();
+    updateNetMotion();
+
+    drawWaterHoles();
+
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        activeParticles[i].update();
+        activeParticles[i].draw();
+        if (activeParticles[i].alpha <= 0) activeParticles.splice(i, 1);
+    }
+
+    drawNetAndBarrel();
+    drawUI();
+
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudioContextOnly(); 
+    if (gameOver || net.state === 'swooping' || net.state === 'scooping') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    let hitRange = canvas.width < 600 ? 45 : 65;
+
+    for (let i = 0; i < SPOT_COUNT; i++) {
+        let s = spots[i];
+        if (s.fishYOffset > 0.2 && s.fishState !== 'caught') {
+            if (x >= s.x - hitRange && x <= s.x + hitRange && y >= s.y - 70 && y <= s.y + 35) {
+                handleWhackAttempt(i, s);
+                break;
+            }
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    phonicsWords = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (phonicsWords.length === 0) phonicsWords = ['bell'];
+    
+    // Select one fixed target pattern for the whole game round
+    targetPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
+    
+    if (audioCtx && document.getElementById('audio-overlay').style.display === 'none') { 
+        announceTarget(); 
+    }
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    caughtFishColors = []; 
+    activeParticles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    net.state = 'idle';
+    net.isRed = false;
+
+    resizeCanvas();
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+            if (gameWon) playSplashSound(); else playErrorBuzz();
+        }
+    }, 1000);
+}
+
+window.onload = function() {
+    resizeCanvas();
+    restartGame();
+    requestAnimationFrame(gameLoop);
+    setTimeout(resizeCanvas, 100);
+    setTimeout(resizeCanvas, 500);
+};
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

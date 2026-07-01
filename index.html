@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Untitled</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Sight Word Games</title>
+     <!-- Embedded Readable Early-Reader Font Resource Stack -->
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+     
+     <style>
+          /* ===== GLOBAL STYLES ===== */
+          body {
+               margin: 0;
+               padding: 0;
+               /* Enforces hyper-legible educational fonts over basic system defaults */
+               font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+               background-color: #fffaf0;
+               text-align: center;
+               display: flex;
+               flex-direction: column;
+               align-items: center;
+               justify-content: center;
+               min-height: 100vh;
+          }
+
+          h1 {
+               font-size: 48px;
+               margin: 40px 10px;
+               color: #333;
+               font-weight: 700;
+          }
+
+          /* ===== BUTTON LAYOUT ===== */
+          .button-container {
+               display: flex;
+               flex-direction: column;
+               gap: 20px;
+          }
+
+          .button-row {
+               display: flex;
+               justify-content: center;
+               gap: 20px;
+               flex-wrap: wrap;
+               max-width: 800px;
+          }
+
+          .game-button {
+               width: 120px;
+               height: 120px;
+               font-family: inherit;
+               font-size: 48px;
+               font-weight: bold;
+               border: none;
+               color: white;
+               cursor: pointer;
+               border-radius: 20px;
+               transition: transform 0.1s, box-shadow 0.1s, filter 0.1s;
+               box-shadow: 0 6px #555;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               user-select: none;
+          }
+
+          /* Vibrant, kid-friendly button colors */
+          .red { background-color: #e74c3c; box-shadow: 0 6px #c0392b; }
+          .purple { background-color: #9b59b6; box-shadow: 0 6px #8e44ad; }
+          .green { background-color: #27ae60; box-shadow: 0 6px #1e8449; }
+
+          .game-button:hover {
+               filter: brightness(105%);
+          }
+
+          /* Smooth push interaction */
+          .game-button:active {
+               transform: translateY(4px);
+               box-shadow: 0 2px #444;
+               filter: brightness(115%);
+          }
+     </style>
+</head>
+<body>
+
+     <h1>Sight Word Games</h1>
+
+     <div class="button-container">
+          <div class="button-row">
+               <button class="game-button red" onclick="openGame(1)">1</button>
+               <button class="game-button red" onclick="openGame(2)">2</button>
+               <button class="game-button red" onclick="openGame(3)">3</button>
+               <button class="game-button red" onclick="openGame(4)">4</button>
+          </div>
+
+          <div class="button-row">
+               <button class="game-button purple" onclick="openGame(5)">5</button>
+               <button class="game-button purple" onclick="openGame(6)">6</button>
+               <button class="game-button purple" onclick="openGame(7)">7</button>
+          </div>
+
+          <div class="button-row">
+               <button class="game-button green" onclick="openGame(8)">8</button>
+               <button class="game-button green" onclick="openGame(9)">9</button>
+               <button class="game-button green" onclick="openGame(10)">10</button>
+          </div>
+     </div>
+
+     <script>
+          function openGame(num) {
+               // Automatically builds the filename (e.g., "game1.html") 
+               // and opens it in a new tab.
+               const filename = "game" + num + ".html";
+               window.open(filename, '_blank');
+          }
+     </script>
+</body>
+</html>
+    
+  </body>
+  
+</html>

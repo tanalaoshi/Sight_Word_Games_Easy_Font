@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Monkeys</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Jungle Banana Throw</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #064e3b;
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 75vh;
+            min-height: 400px;
+            background: #022c22; 
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 25vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #15803d;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 45vw;
+            height: 14vh;
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 15px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #16a34a; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #15803d;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">a, to, for</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let gameOver = false;
+let gameWon = false;
+
+const MONKEY_COUNT = 3;
+let monkeys = [];
+let banana = { x: 0, y: 0, startX: 0, startY: 0, targetX: 0, targetY: 0, progress: 1, state: 'idle', targetMonkeyIdx: -1, rotation: 0 };
+let activeParticles = [];
+
+const WORD_DISPLAY_DURATION = 4500; 
+let wordSwitchTimer = 0;
+let timerInterval = null;
+
+// --- EXPLICIT LIVE JUNGLE AUDIO CHANNEL ---
+let bgMusic = null;
+let audioCtx = null; 
+
+function initAudio() {
+    if (!bgMusic) {
+        bgMusic = new Audio();
+        bgMusic.src = 'https://actions.google.com/sounds/v1/ambiences/jungle_atmosphere_late_afternoon.ogg'; 
+        bgMusic.loop = true;
+        bgMusic.volume = 1.0; 
+    }
+    
+    if (bgMusic.paused) {
+        bgMusic.play().catch(e => console.log("Audio waiting for active screen gesture context: ", e));
+    }
+
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        
+        // --- NATURAL PHONETIC TRANSLATOR ---
+        let voiceText = text.toLowerCase().trim();
+        if (voiceText === 'a') {
+            voiceText = 'uh';
+        }
+        
+        const utterance = new SpeechSynthesisUtterance(voiceText);
+        utterance.rate = 0.95;  
+        utterance.pitch = 1.1; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playWhooshSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(680, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+}
+
+function playHappyMonkey() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    
+    // High-pitched monkey chattering sequence
+    for (let i = 0; i < 6; i++) {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'square'; 
+        osc.frequency.setValueAtTime(580 + (i * 130), t + (i * 0.07));
+        osc.frequency.exponentialRampToValueAtTime(1400 + (i * 30), t + (i * 0.07) + 0.05);
+        
+        let filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1600, t);
+        
+        gain.gain.setValueAtTime(0.4, t + (i * 0.07)); 
+        gain.gain.exponentialRampToValueAtTime(0.001, t + (i * 0.07) + 0.06);
+        
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t + (i * 0.07));
+        osc.stop(t + (i * 0.07) + 0.06);
+    }
+
+    // Crunching sound effects
+    for(let j=0; j<4; j++) {
+        let oscB = audioCtx.createOscillator();
+        let gainB = audioCtx.createGain();
+        oscB.type = 'triangle';
+        oscB.frequency.setValueAtTime(160, t + 0.08 + (j * 0.09));
+        gainB.gain.setValueAtTime(0.5, t + 0.08 + (j * 0.09));
+        gainB.gain.exponentialRampToValueAtTime(0.01, t + 0.15 + (j * 0.09));
+        oscB.connect(gainB);
+        gainB.connect(audioCtx.destination);
+        oscB.start(t + 0.08 + (j * 0.09));
+        oscB.stop(t + 0.18 + (j * 0.09));
+    }
+}
+
+function playSadMonkey() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    for (let i = 0; i < 3; i++) {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(220 - (i * 25), t + (i * 0.1));
+        osc.frequency.linearRampToValueAtTime(110, t + (i * 0.1) + 0.09);
+        gain.gain.setValueAtTime(0.4, t + (i * 0.1));
+        gain.gain.exponentialRampToValueAtTime(0.001, t + (i * 0.1) + 0.09);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t + (i * 0.1));
+        osc.stop(t + (i * 0.1) + 0.09);
+    }
+}
+
+function resizeCanvas() {
+    let targetWidth = window.innerWidth || 800;
+    let targetHeight = (window.innerHeight * 0.75) || 500;
+    
+    const container = document.getElementById('game-container');
+    if (container) {
+        let rect = container.getBoundingClientRect();
+        if (rect.width > 0) targetWidth = rect.width;
+        if (rect.height > 0) targetHeight = rect.height;
+    }
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    resetMonkeyCoordinates();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function resetMonkeyCoordinates() {
+    const oldMonkeys = monkeys;
+    monkeys = [];
+    const segment = canvas.width / MONKEY_COUNT;
+    let calculatedY = canvas.height * 0.25; 
+
+    for (let i = 0; i < MONKEY_COUNT; i++) {
+        monkeys.push({
+            x: (segment * i) + (segment / 2),
+            y: calculatedY, 
+            word: oldMonkeys[i] ? oldMonkeys[i].word : '',
+            isTarget: oldMonkeys[i] ? oldMonkeys[i].isTarget : false,
+            wasHit: oldMonkeys[i] ? oldMonkeys[i].wasHit : false,
+            shakeTimer: 0,
+            munchTimer: 0
+        });
+    }
+}
+
+function populateMonkeys() {
+    if (words.length === 0) return;
+    playWhooshSound();
+    
+    let randPattern = Math.random();
+    for (let i = 0; i < MONKEY_COUNT; i++) {
+        monkeys[i].wasHit = false;
+        monkeys[i].shakeTimer = 0;
+        monkeys[i].munchTimer = 0;
+        
+        let selectTarget = false;
+        if (randPattern < 0.65) {
+            selectTarget = (i === Math.floor(randPattern * 10) % MONKEY_COUNT) || (Math.random() < 0.2);
+        } else if (randPattern < 0.85) {
+            selectTarget = true;
+        } else {
+            selectTarget = false;
+        }
+
+        if (selectTarget) {
+            monkeys[i].word = targetWord;
+            monkeys[i].isTarget = true;
+        } else {
+            let stray = words[Math.floor(Math.random() * words.length)];
+            monkeys[i].word = (stray === targetWord) ? words[(words.indexOf(stray) + 1) % words.length] || 'and' : stray;
+            monkeys[i].isTarget = false;
+        }
+    }
+    wordSwitchTimer = Date.now();
+}
+
+class PopParticle {
+    constructor(x, y, color, type = 'dot') {
+        this.x = x; this.y = y;
+        this.type = type;
+        this.vx = (Math.random() - 0.5) * 8;
+        this.vy = type === 'peel' ? -Math.random() * 7 - 4 : (Math.random() - 0.5) * 8;
+        if (type === 'peel') this.vx = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 8 + 5);
+        
+        this.radius = type === 'chunk' ? Math.random() * 5 + 4 : Math.random() * 4 + 2;
+        this.alpha = 1;
+        this.decay = type === 'peel' ? 0.02 : Math.random() * 0.05 + 0.03;
+        this.color = color;
+        this.rotation = Math.random() * Math.PI;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
+        
+        if (this.type === 'peel') {
+            ctx.strokeStyle = this.color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(0, 0, 12, 0, Math.PI / 2);
+            ctx.stroke();
+        } else if (this.type === 'chunk') {
+            ctx.fillRect(-this.radius, -this.radius/2, this.radius*2, this.radius);
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        if (this.type === 'peel' || this.type === 'chunk') this.vy += 0.25; 
+        this.alpha -= this.decay;
+        this.rotation += 0.15;
+    }
+}
+
+function drawJungleBackground() {
+    ctx.fillStyle = '#065f46';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#047857';
+    ctx.beginPath();
+    for (let i = 0; i < canvas.width + 100; i += 80) {
+        ctx.arc(i, 0, 95, 0, Math.PI * 2);
+    }
+    ctx.fill();
+}
+
+function drawMonkeys() {
+    if (monkeys.length === 0) return;
+    let scaleFactor = canvas.width < 600 ? 0.75 : 1.0;
+
+    monkeys.forEach(m => {
+        ctx.save();
+        let shakeOffsetX = 0;
+        let swingAngle = Math.sin(Date.now() * 0.005 + m.x) * 0.08; 
+        
+        if (m.shakeTimer > 0) {
+            shakeOffsetX = Math.sin(Date.now() * 0.07) * 8;
+            swingAngle = Math.sin(Date.now() * 0.09) * 0.3; 
+            m.shakeTimer -= 16;
+        }
+
+        if (m.munchTimer > 0) {
+            m.munchTimer -= 16;
+        }
+
+        const mX = m.x + shakeOffsetX;
+        
+        // Vines
+        ctx.strokeStyle = '#064e3b';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(m.x, 0);
+        ctx.quadraticCurveTo(mX, m.y / 2, mX, m.y - 35 * scaleFactor);
+        ctx.stroke();
+
+        ctx.translate(mX, m.y);
+        ctx.rotate(swingAngle);
+
+        // Arms
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 6 * scaleFactor;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-10 * scaleFactor, -10 * scaleFactor);
+        ctx.lineTo(-15 * scaleFactor, -40 * scaleFactor);
+        ctx.moveTo(10 * scaleFactor, -10 * scaleFactor);
+        ctx.lineTo(15 * scaleFactor, -40 * scaleFactor);
+        ctx.stroke();
+
+        // Legs
+        ctx.beginPath();
+        ctx.moveTo(-12 * scaleFactor, 15 * scaleFactor);
+        ctx.lineTo(-16 * scaleFactor, 38 * scaleFactor);
+        ctx.moveTo(12 * scaleFactor, 15 * scaleFactor);
+        ctx.lineTo(16 * scaleFactor, 38 * scaleFactor);
+        ctx.stroke();
+
+        // Tail
+        ctx.lineWidth = 3 * scaleFactor;
+        ctx.beginPath();
+        ctx.arc(-20 * scaleFactor, 15 * scaleFactor, 14 * scaleFactor, 0, Math.PI);
+        ctx.stroke();
+
+        // Torso
+        ctx.fillStyle = '#78350f';
+        ctx.beginPath();
+        ctx.ellipse(0, 12 * scaleFactor, 16 * scaleFactor, 20 * scaleFactor, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fde68a';
+        ctx.beginPath();
+        ctx.ellipse(0, 12 * scaleFactor, 10 * scaleFactor, 13 * scaleFactor, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head
+        ctx.fillStyle = '#78350f';
+        ctx.beginPath();
+        ctx.arc(0, -12 * scaleFactor, 22 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Ears
+        ctx.beginPath();
+        ctx.arc(-22 * scaleFactor, -14 * scaleFactor, 7 * scaleFactor, 0, Math.PI * 2);
+        ctx.arc(22 * scaleFactor, -14 * scaleFactor, 7 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fbcfe8';
+        ctx.beginPath();
+        ctx.arc(-22 * scaleFactor, -14 * scaleFactor, 4 * scaleFactor, 0, Math.PI * 2);
+        ctx.arc(22 * scaleFactor, -14 * scaleFactor, 4 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mask Face
+        ctx.fillStyle = '#fde68a';
+        ctx.beginPath();
+        ctx.arc(-8 * scaleFactor, -14 * scaleFactor, 10 * scaleFactor, 0, Math.PI * 2);
+        ctx.arc(8 * scaleFactor, -14 * scaleFactor, 10 * scaleFactor, 0, Math.PI * 2);
+        ctx.arc(0, -6 * scaleFactor, 12 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#000000';
+        if (m.shakeTimer > 0) {
+            ctx.font = `bold ${13 * scaleFactor}px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+            ctx.fillText("X", -12 * scaleFactor, -10 * scaleFactor);
+            ctx.fillText("X", 2 * scaleFactor, -10 * scaleFactor);
+        } else {
+            ctx.beginPath();
+            ctx.arc(-7 * scaleFactor, -13 * scaleFactor, 3 * scaleFactor, 0, Math.PI * 2);
+            ctx.arc(7 * scaleFactor, -13 * scaleFactor, 3 * scaleFactor, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Chewing mouth layout
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.5;
+        
+        if (m.munchTimer > 0) {
+            let alternatePhase = Math.floor(Date.now() / 120) % 2;
+            
+            if (alternatePhase === 0) {
+                ctx.fillStyle = '#b91c1c'; 
+                ctx.beginPath();
+                ctx.moveTo(-9 * scaleFactor, -6 * scaleFactor);
+                ctx.lineTo(9 * scaleFactor, -6 * scaleFactor);
+                ctx.arc(0, -6 * scaleFactor, 9 * scaleFactor, 0, Math.PI, false);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(0, -8 * scaleFactor, 6 * scaleFactor, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+            }
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, -5 * scaleFactor, 4 * scaleFactor, 0, Math.PI);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // Word text tags
+        if (!m.wasHit) {
+            ctx.save();
+            let labelW = 90 * scaleFactor;
+            let labelH = 24 * scaleFactor;
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.95)'; 
+            ctx.strokeStyle = '#15803d';
+            ctx.lineWidth = 2;
+            ctx.fillRect(mX - labelW/2, m.y - 75 * scaleFactor, labelW, labelH);
+            ctx.strokeRect(mX - labelW/2, m.y - 75 * scaleFactor, labelW, labelH);
+            
+            ctx.fillStyle = '#064e3b';
+            ctx.font = `bold ${Math.floor(14 * scaleFactor)}px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(m.word || '', mX, m.y - 62 * scaleFactor);
+            ctx.restore();
+        }
+    });
+}
+
+function drawBananaProjectile() {
+    let radius = canvas.width < 600 ? 14 : 18;
+    if (banana.state === 'idle') {
+        banana.x = canvas.width / 2;
+        banana.y = canvas.height - radius - 15;
+        banana.rotation = 0;
+    }
+    
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(banana.x, canvas.height - 15, radius * 1.3 * (banana.y / canvas.height), 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(banana.x, banana.y);
+    ctx.rotate(banana.rotation);
+    
+    ctx.fillStyle = '#facc15'; 
+    ctx.strokeStyle = '#ca8a04';
+    ctx.lineWidth = 2;
+    
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0.2, Math.PI - 0.4); 
+    ctx.quadraticCurveTo(-radius * 0.3, 0, radius * 0.9, radius * 0.2); 
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.arc(-radius * 0.9, radius * 0.3, 3, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+function updateBananaMotion() {
+    if (banana.state === 'flying') {
+        banana.progress += 0.08; 
+        banana.rotation += 0.25; 
+        if (banana.progress >= 1) {
+            banana.progress = 1;
+            banana.state = 'idle';
+            checkThrowResult(banana.targetMonkeyIdx);
+        }
+        let progress = banana.progress;
+        banana.x = banana.startX + (banana.targetX - banana.startX) * progress;
+        let linearY = banana.startY + (banana.targetY - banana.startY) * progress;
+        let arcHeight = Math.sin(progress * Math.PI) * (canvas.height * 0.22); 
+        banana.y = linearY - arcHeight;
+    }
+}
+
+function checkThrowResult(idx) {
+    let m = monkeys[idx];
+    if (!m || m.wasHit) return;
+
+    if (m.word === targetWord) {
+        correctTaps++;
+        m.wasHit = true;
+        m.munchTimer = 1600; 
+        speakWord(targetWord);
+        playHappyMonkey();
+        
+        for (let i = 0; i < 6; i++) {
+            activeParticles.push(new PopParticle(m.x, m.y - 10, '#eab308', 'peel'));
+        }
+        for (let i = 0; i < 18; i++) {
+            activeParticles.push(new PopParticle(m.x, m.y - 5, '#fef08a', 'chunk'));
+        }
+    } else {
+        incorrectTaps++;
+        m.shakeTimer = 500;
+        playSadMonkey();
+        for (let i = 0; i < 15; i++) {
+            activeParticles.push(new PopParticle(m.x, m.y, '#f87171', 'dot'));
+        }
+    }
+}
+
+function drawUI() {
+    let monkeyY = monkeys[0] ? monkeys[0].y : canvas.height * 0.25;
+    let targetBoxY = monkeyY + canvas.height * 0.16; 
+    
+    let boxW = Math.min(220, canvas.width * 0.5);
+    let boxH = Math.min(50, canvas.height * 0.12);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#16a34a';
+    ctx.lineWidth = 4;
+    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+
+    ctx.fillStyle = '#064e3b';
+    ctx.font = `bold ${boxH * 0.55}px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+
+    let scoreBoxW = canvas.width < 600 ? 190 : 230;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.strokeStyle = '#a7f3d0';
+    ctx.lineWidth = 2;
+    ctx.fillRect(15, 15, scoreBoxW, 85);
+    ctx.strokeRect(15, 15, scoreBoxW, 85);
+
+    ctx.fillStyle = '#065f46';
+    ctx.font = `bold 14px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 35);
+    ctx.fillText(`Caught: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 55);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    return total === 0 ? 100 : Math.round((correctTaps / total) * 100);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(2, 44, 34, 0.9)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 32px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText("🐒 Jungle King Victory! 🐒", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Nice Try! Keep Practicing!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `20px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+    ctx.fillText(`Final Jungle Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 30);
+}
+
+function gameLoop() {
+    if (!gameOver && Date.now() - wordSwitchTimer >= WORD_DISPLAY_DURATION) {
+        populateMonkeys();
+    }
+
+    drawJungleBackground();
+    drawMonkeys();
+    updateBananaMotion();
+    drawBananaProjectile();
+
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        activeParticles[i].update();
+        activeParticles[i].draw();
+        if (activeParticles[i].alpha <= 0) activeParticles.splice(i, 1);
+    }
+
+    drawUI();
+
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudio(); 
+    if (gameOver || banana.state === 'flying') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    let hitRange = canvas.width < 600 ? 50 : 75;
+
+    for (let i = 0; i < MONKEY_COUNT; i++) {
+        let m = monkeys[i];
+        if (x >= m.x - hitRange && x <= m.x + hitRange && y >= m.y - 95 && y <= m.y + 60) {
+            if (m.wasHit) break; 
+            
+            let radius = canvas.width < 600 ? 14 : 18;
+            banana.startX = canvas.width / 2;
+            banana.startY = canvas.height - radius - 15;
+            banana.targetX = m.x;
+            banana.targetY = m.y - 10;
+            banana.progress = 0;
+            banana.targetMonkeyIdx = i;
+            banana.state = 'flying';
+            break;
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    
+    if (audioCtx) { speakWord(targetWord); }
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    activeParticles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    banana.state = 'idle';
+
+    resizeCanvas();
+    populateMonkeys();
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            if (gameWon) playHappyMonkey(); else playSadMonkey();
+        }
+    }, 1000);
+}
+
+window.onload = function() {
+    resizeCanvas();
+    restartGame();
+    requestAnimationFrame(gameLoop);
+    setTimeout(resizeCanvas, 100);
+    setTimeout(resizeCanvas, 500);
+};
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

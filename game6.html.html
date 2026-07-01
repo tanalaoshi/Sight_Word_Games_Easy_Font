@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Basketball Shootout</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Basketball Shootout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020617;
+            /* Swapped fallback stack for Comic Neue */
+            font-family: 'Comic Neue', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 75vh;
+            min-height: 400px;
+            background: #1e1b4b; 
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 25vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #c2410c;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 45vw;
+            height: 14vh;
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 15px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #c2410c; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #9a3412;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">the, and, a, on</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let gameOver = false;
+let gameWon = false;
+
+const HOOPS_COUNT = 3;
+let hoops = [];
+let basketball = { x: 0, y: 0, startX: 0, startY: 0, targetX: 0, targetY: 0, progress: 1, state: 'idle', targetHoopIdx: -1 };
+let activeParticles = [];
+
+const WORD_DISPLAY_DURATION = 4500; 
+let wordSwitchTimer = 0;
+let timerInterval = null;
+
+// --- NATIVE AUDIO ELEMENT ENGINE ---
+let bgMusic = null;
+let audioCtx = null; 
+
+function initAudio() {
+    if (!bgMusic) {
+        bgMusic = new Audio();
+        bgMusic.src = 'https://files.catbox.moe/3efzog.mp3'; 
+        bgMusic.loop = true;
+        bgMusic.volume = 0.4; 
+    }
+    
+    if (bgMusic.paused) {
+        bgMusic.play().catch(e => console.log("Audio waiting for user gesture context: ", e));
+    }
+
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        
+        // --- NATURAL PHONETIC TRANSLATOR ---
+        let voiceText = text.toLowerCase().trim();
+        if (voiceText === 'a') {
+            voiceText = 'uh';
+        } else if (voiceText === 'the') {
+            voiceText = 'thee'; 
+        }
+        
+        const utterance = new SpeechSynthesisUtterance(voiceText);
+        utterance.rate = 0.85;  
+        utterance.pitch = 1.05; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playWhooshSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(450, audioCtx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.25);
+}
+
+function playSwishAndCheer() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+
+    let bufferSize = audioCtx.sampleRate * 0.35;
+    let buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    let data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) { data[i] = Math.random() * 2 - 1; }
+    
+    let swishSource = audioCtx.createBufferSource();
+    swishSource.buffer = buffer;
+    
+    let filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2200, t);
+    filter.frequency.exponentialRampToValueAtTime(900, t + 0.2);
+    filter.Q.setValueAtTime(4, t);
+
+    let swishGain = audioCtx.createGain();
+    swishGain.gain.setValueAtTime(0.4, t);
+    swishGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+
+    swishSource.connect(filter);
+    filter.connect(swishGain);
+    swishGain.connect(audioCtx.destination);
+    swishSource.start(t);
+
+    let cheerSize = audioCtx.sampleRate * 1.5;
+    let cheerBuf = audioCtx.createBuffer(1, cheerSize, audioCtx.sampleRate);
+    let cheerData = cheerBuf.getChannelData(0);
+    for(let i=0; i<cheerSize; i++) {
+        let ct = i / audioCtx.sampleRate;
+        cheerData[i] = (Math.random() * 2 - 1) * (1.0 - ct / 1.5);
+    }
+    
+    let cheerSource = audioCtx.createBufferSource();
+    cheerSource.buffer = cheerBuf;
+
+    let cheerFilter = audioCtx.createBiquadFilter();
+    cheerFilter.type = 'lowpass';
+    cheerFilter.frequency.setValueAtTime(800, t);
+    cheerFilter.frequency.linearRampToValueAtTime(1200, t + 0.2);
+
+    let cheerGain = audioCtx.createGain();
+    cheerGain.gain.setValueAtTime(0, t);
+    cheerGain.gain.linearRampToValueAtTime(0.28, t + 0.15); 
+    cheerGain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+
+    cheerSource.connect(cheerFilter);
+    cheerFilter.connect(cheerGain);
+    cheerGain.connect(audioCtx.destination);
+    cheerSource.start(t);
+}
+
+function playRimAndGroan() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+
+    let osc1 = audioCtx.createOscillator();
+    let osc2 = audioCtx.createOscillator();
+    let clankGain = audioCtx.createGain();
+
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(180, t); 
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(345, t); 
+
+    let clankFilter = audioCtx.createBiquadFilter();
+    clankFilter.type = 'bandpass';
+    clankFilter.frequency.setValueAtTime(260, t);
+    clankFilter.Q.setValueAtTime(5, t);
+
+    clankGain.gain.setValueAtTime(0.45, t);
+    clankGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+    osc1.connect(clankFilter);
+    osc2.connect(clankFilter);
+    clankFilter.connect(clankGain);
+    clankGain.connect(audioCtx.destination);
+    
+    osc1.start(t); osc2.start(t);
+    osc1.stop(t + 0.2); osc2.stop(t + 0.2);
+
+    let groanSize = audioCtx.sampleRate * 1.0;
+    let groanBuf = audioCtx.createBuffer(1, groanSize, audioCtx.sampleRate);
+    let groanData = groanBuf.getChannelData(0);
+    
+    for(let i=0; i<groanSize; i++) {
+        let gt = i / audioCtx.sampleRate;
+        let noise = Math.random() * 2 - 1;
+        let vocalWave = Math.sin(2 * Math.PI * (130 - (gt * 40)) * gt); 
+        groanData[i] = (noise * 0.3 + vocalWave * 0.7) * (1.0 - gt);
+    }
+    
+    let groanSource = audioCtx.createBufferSource();
+    groanSource.buffer = groanBuf;
+
+    let groanFilter = audioCtx.createBiquadFilter();
+    groanFilter.type = 'lowpass';
+    groanFilter.frequency.setValueAtTime(400, t);
+
+    let groanGain = audioCtx.createGain();
+    groanGain.gain.setValueAtTime(0, t);
+    groanGain.gain.linearRampToValueAtTime(0.32, t + 0.1);
+    groanGain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+
+    groanSource.connect(groanFilter);
+    groanFilter.connect(groanGain);
+    groanGain.connect(audioCtx.destination);
+    groanSource.start(t);
+}
+
+function playWinSound() { playSwishAndCheer(); }
+function playLoseSound() { playRimAndGroan(); }
+
+function resizeCanvas() {
+    let targetWidth = window.innerWidth || 800;
+    let targetHeight = (window.innerHeight * 0.75) || 500;
+    
+    const container = document.getElementById('game-container');
+    if (container) {
+        let rect = container.getBoundingClientRect();
+        if (rect.width > 0) targetWidth = rect.width;
+        if (rect.height > 0) targetHeight = rect.height;
+    }
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    
+    resetHoopCoordinates();
+    
+    if (basketball.state === 'idle') {
+        basketball.x = canvas.width / 2;
+        basketball.y = canvas.height - canvas.height * 0.1;
+    }
+}
+window.addEventListener('resize', resizeCanvas);
+
+function resetHoopCoordinates() {
+    const oldHoops = hoops;
+    hoops = [];
+    const segment = canvas.width / HOOPS_COUNT;
+    let calculatedHoopY = canvas.height * 0.18; 
+    if (canvas.height < 450) calculatedHoopY = canvas.height * 0.15;
+
+    for (let i = 0; i < HOOPS_COUNT; i++) {
+        hoops.push({
+            x: (segment * i) + (segment / 2),
+            y: calculatedHoopY, 
+            word: oldHoops[i] ? oldHoops[i].word : '',
+            isTarget: oldHoops[i] ? oldHoops[i].isTarget : false,
+            wasHit: oldHoops[i] ? oldHoops[i].wasHit : false,
+            shakeTimer: 0
+        });
+    }
+}
+
+function populateHoops() {
+    if (words.length === 0) return;
+    playWhooshSound();
+    
+    let randPattern = Math.random();
+    
+    for (let i = 0; i < HOOPS_COUNT; i++) {
+        hoops[i].wasHit = false;
+        hoops[i].shakeTimer = 0;
+        
+        let selectTarget = false;
+        if (randPattern < 0.65) {
+            selectTarget = (i === Math.floor(randPattern * 10) % HOOPS_COUNT) || (Math.random() < 0.2);
+        } else if (randPattern < 0.85) {
+            selectTarget = true;
+        } else {
+            selectTarget = false;
+        }
+
+        if (selectTarget) {
+            hoops[i].word = targetWord;
+            hoops[i].isTarget = true;
+        } else {
+            let stray = words[Math.floor(Math.random() * words.length)];
+            hoops[i].word = (stray === targetWord) ? words[(words.indexOf(stray) + 1) % words.length] || 'and' : stray;
+            hoops[i].isTarget = false;
+        }
+    }
+    wordSwitchTimer = Date.now();
+}
+
+class PopParticle {
+    constructor(x, y, color) {
+        this.x = x; this.y = y;
+        this.vx = (Math.random() - 0.5) * 10;
+        this.vy = (Math.random() - 0.5) * 10;
+        this.radius = Math.random() * 4 + 2;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.05 + 0.03;
+        this.color = color;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.alpha -= this.decay;
+    }
+}
+
+function drawBasketballCourt() {
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = '#d97706';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < canvas.height; i += 25) {
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(canvas.width / 2, canvas.height, canvas.height * 0.75, Math.PI, 0);
+    ctx.stroke();
+
+    let keyW = Math.min(240, canvas.width * 0.4);
+    let keyH = Math.min(220, canvas.height * 0.4);
+    ctx.fillStyle = 'rgba(217, 119, 6, 0.25)';
+    ctx.fillRect(canvas.width / 2 - keyW/2, canvas.height - keyH, keyW, keyH);
+    ctx.strokeRect(canvas.width / 2 - keyW/2, canvas.height - keyH, keyW, keyH);
+}
+
+function drawHoopsSystem() {
+    if (hoops.length === 0) return;
+    let scaleFactor = canvas.width < 600 ? 0.75 : 1.0;
+
+    hoops.forEach(h => {
+        ctx.save();
+        let shakeOffsetX = 0;
+        if (h.shakeTimer > 0) {
+            shakeOffsetX = Math.sin(Date.now() * 0.06) * 6;
+            h.shakeTimer -= 16;
+        }
+
+        const hX = h.x + shakeOffsetX;
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(hX - 4, 0, 8, Math.max(10, h.y - 30 * scaleFactor));
+
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 3;
+        ctx.fillRect(hX - 50 * scaleFactor, h.y - 40 * scaleFactor, 100 * scaleFactor, 38 * scaleFactor);
+        ctx.strokeRect(hX - 50 * scaleFactor, h.y - 40 * scaleFactor, 100 * scaleFactor, 38 * scaleFactor);
+        
+        ctx.strokeStyle = '#ea580c';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(hX, h.y, 18 * scaleFactor, 5 * scaleFactor, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for(let offset = -12 * scaleFactor; offset <= 12 * scaleFactor; offset += 6 * scaleFactor) {
+            ctx.moveTo(hX + offset, h.y);
+            ctx.lineTo(hX + (offset * 0.6), h.y + 18 * scaleFactor);
+        }
+        ctx.stroke();
+
+        if (!h.wasHit) {
+            let labelW = 85 * scaleFactor;
+            let labelH = 22 * scaleFactor;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.fillRect(hX - labelW/2, h.y - 68 * scaleFactor, labelW, labelH);
+            
+            ctx.fillStyle = '#ffffff';
+            // Swapped hoop text font style to Comic Neue
+            ctx.font = `bold ${Math.floor(13 * scaleFactor)}px "Comic Neue", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(h.word || '', hX, h.y - 56 * scaleFactor);
+        }
+        ctx.restore();
+    });
+}
+
+function drawBall() {
+    let radius = canvas.width < 600 ? 16 : 20;
+    if (basketball.state === 'idle') {
+        basketball.x = canvas.width / 2;
+        basketball.y = canvas.height - radius - 15;
+    }
+    
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(basketball.x, canvas.height - 15, radius * 1.2 * (basketball.y / canvas.height), 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#c2410c';
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(basketball.x, basketball.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(basketball.x, basketball.y, radius, Math.PI * 0.5, Math.PI * 1.5);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function updateBallMotion() {
+    if (basketball.state === 'flying') {
+        basketball.progress += 0.085; 
+        if (basketball.progress >= 1) {
+            basketball.progress = 1;
+            basketball.state = 'idle';
+            checkShotResult(basketball.targetHoopIdx);
+        }
+        let progress = basketball.progress;
+        basketball.x = basketball.startX + (basketball.targetX - basketball.startX) * progress;
+        let arcHeight = Math.sin(progress * Math.PI) * (canvas.height * 0.25); 
+        basketball.y = (basketball.startY + (basketball.targetY - basketball.startY) * progress) - arcHeight;
+    }
+}
+
+function checkShotResult(idx) {
+    let h = hoops[idx];
+    if (!h || h.wasHit) return;
+
+    if (h.word === targetWord) {
+        correctTaps++;
+        h.wasHit = true;
+        speakWord(targetWord);
+        playSwishAndCheer();
+        for (let i = 0; i < 20; i++) activeParticles.push(new PopParticle(h.x, h.y + 10, '#38bdf8'));
+    } else {
+        incorrectTaps++;
+        h.shakeTimer = 400;
+        playRimAndGroan();
+        for (let i = 0; i < 15; i++) activeParticles.push(new PopParticle(h.x, h.y, '#ef4444'));
+    }
+}
+
+function drawUI() {
+    let hoopY = hoops[0] ? hoops[0].y : canvas.height * 0.18;
+    let targetBoxY = hoopY + canvas.height * 0.15; 
+    
+    let boxW = Math.min(220, canvas.width * 0.5);
+    let boxH = Math.min(50, canvas.height * 0.12);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#c2410c';
+    ctx.lineWidth = 3;
+    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+
+    ctx.fillStyle = '#1e293b';
+    // Swapped target box word font structure to Comic Neue
+    ctx.font = `bold ${boxH * 0.6}px "Comic Neue", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+
+    let scoreBoxW = canvas.width < 600 ? 190 : 230;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 2;
+    ctx.fillRect(15, 15, scoreBoxW, 85);
+    ctx.strokeRect(15, 15, scoreBoxW, 85);
+
+    ctx.fillStyle = '#334155';
+    // Swapped upper scorecard values font styling to Comic Neue
+    ctx.font = 'bold 14px "Comic Neue", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Timer: ${timeLeft}s`, 25, 35);
+    ctx.fillText(`Score: ${correctTaps}   Miss: ${incorrectTaps}`, 25, 55);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    return total === 0 ? 100 : Math.round((correctTaps / total) * 100);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    // Swapped endgame heading layout font to Comic Neue
+    ctx.font = 'bold 32px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText("🏀 Victory! 🏀", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Good Try! Practice More!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    // Swapped endgame accuracy metric font to Comic Neue
+    ctx.font = '20px "Comic Neue", sans-serif';
+    ctx.fillText(`Final Shootout Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 30);
+}
+
+function gameLoop() {
+    if (!gameOver && Date.now() - wordSwitchTimer >= WORD_DISPLAY_DURATION) {
+        populateHoops();
+    }
+
+    drawBasketballCourt();
+    drawHoopsSystem();
+    updateBallMotion();
+    drawBall();
+
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        activeParticles[i].update();
+        activeParticles[i].draw();
+        if (activeParticles[i].alpha <= 0) activeParticles.splice(i, 1);
+    }
+
+    drawUI();
+
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudio(); 
+    if (gameOver || basketball.state === 'flying') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    let hitRange = canvas.width < 600 ? 50 : 70;
+
+    for (let i = 0; i < HOOPS_COUNT; i++) {
+        let h = hoops[i];
+        if (x >= h.x - hitRange && x <= h.x + hitRange && y >= h.y - 90 && y <= h.y + 40) {
+            if (h.wasHit) break; 
+            
+            let radius = canvas.width < 600 ? 16 : 20;
+            basketball.startX = canvas.width / 2;
+            basketball.startY = canvas.height - radius - 15;
+            basketball.targetX = h.x;
+            basketball.targetY = h.y;
+            basketball.progress = 0;
+            basketball.targetHoopIdx = i;
+            basketball.state = 'flying';
+            break;
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    
+    if (audioCtx) { speakWord(targetWord); }
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    activeParticles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    basketball.state = 'idle';
+
+    resizeCanvas();
+    populateHoops();
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            if (gameWon) playWinSound(); else playLoseSound();
+        }
+    }, 1000);
+}
+
+window.onload = function() {
+    resizeCanvas();
+    restartGame();
+    requestAnimationFrame(gameLoop);
+    setTimeout(resizeCanvas, 100);
+    setTimeout(resizeCanvas, 500);
+};
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

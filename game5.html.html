@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Balloon Pop</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Balloon Pop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #7dd3fc;
+            /* Swapped fallback stack for Comic Neue */
+            font-family: 'Comic Neue', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 80vh;
+            background: linear-gradient(to bottom, #38bdf8 0%, #bae6fd 100%);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 20vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #0284c7;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 40vw;
+            height: 10vh;
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 16px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 15px 30px;
+            background-color: #0284c7; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #0369a1;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">the, a</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let balloons = [];
+let particles = [];
+let clouds = [];
+let gameInterval, timerInterval, musicInterval;
+let gameOver = false;
+let gameWon = false;
+
+const UNIFORM_SPEED = 0.9; 
+const LANES = 5; 
+let laneLastSpawnY = Array(LANES).fill(0); 
+
+// --- AUDIO & HAPPY WHISTLE ENGINES ---
+let audioCtx = null;
+let nextLoopStartTime = 0;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        
+        // --- NATURAL PHONETIC TRANSLATOR ---
+        let voiceText = text.toLowerCase().trim();
+        if (voiceText === 'a') {
+            voiceText = 'uh';
+        } else if (voiceText === 'the') {
+            voiceText = 'the '; 
+        }
+
+        const utterance = new SpeechSynthesisUtterance(voiceText);
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => 
+            v.lang.startsWith('en') && 
+            (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Natural'))
+        ) || voices.find(v => v.lang.startsWith('en'));
+        
+        if (preferredVoice) utterance.voice = preferredVoice;
+        utterance.rate = 0.85;  
+        utterance.pitch = 1.15; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playWhistleNote(freq, duration, startTimeAbsolute, volume = 0.12) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    osc.type = 'sine'; 
+    osc.frequency.setValueAtTime(freq, startTimeAbsolute);
+    
+    osc.frequency.linearRampToValueAtTime(freq + 3, startTimeAbsolute + 0.05);
+    osc.frequency.linearRampToValueAtTime(freq - 2, startTimeAbsolute + (duration * 0.5));
+    osc.frequency.linearRampToValueAtTime(freq, startTimeAbsolute + duration);
+    
+    gainNode.gain.setValueAtTime(0, startTimeAbsolute);
+    gainNode.gain.linearRampToValueAtTime(volume, startTimeAbsolute + 0.04);
+    gainNode.gain.setValueAtTime(volume, startTimeAbsolute + (duration * 0.8));
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTimeAbsolute + duration);
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.start(startTimeAbsolute);
+    osc.stop(startTimeAbsolute + duration);
+}
+
+function playIncorrectSound() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(120, audioCtx.currentTime + 0.18);
+    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.18);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.18);
+}
+
+function playWinSound() {
+    const notes = [523.25, 659.25, 783.99, 1046.50];
+    notes.forEach((freq, index) => {
+        playWhistleNote(freq, 0.25, audioCtx.currentTime + (index * 0.06), 0.15);
+    });
+}
+
+function playLoseSound() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(293.66, audioCtx.currentTime + 0.6);
+    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.6);
+}
+
+function scheduleMusicLoop() {
+    if (gameOver) return;
+
+    if (nextLoopStartTime < audioCtx.currentTime) {
+        nextLoopStartTime = audioCtx.currentTime + 0.05;
+    }
+
+    if (nextLoopStartTime < audioCtx.currentTime + 0.25) {
+        const beat = 0.45; 
+        let t = nextLoopStartTime;
+
+        playWhistleNote(587.33, beat - 0.04, t); t += beat; 
+        playWhistleNote(659.25, beat - 0.04, t); t += beat; 
+        playWhistleNote(783.99, beat * 2 - 0.04, t); t += beat * 2; 
+        
+        playWhistleNote(880.00, beat - 0.04, t); t += beat; 
+        playWhistleNote(783.99, beat - 0.04, t); t += beat; 
+        playWhistleNote(659.25, beat - 0.04, t); t += beat; 
+        playWhistleNote(587.33, beat - 0.04, t); t += beat; 
+
+        playWhistleNote(523.25, beat * 2 - 0.04, t); t += beat * 2; 
+        playWhistleNote(587.33, beat - 0.04, t); t += beat; 
+        playWhistleNote(523.25, beat * 3 - 0.04, t); t += beat * 3; 
+
+        t += beat * 3;
+        nextLoopStartTime = t;
+    }
+}
+
+function startMusicLoop() {
+    clearInterval(musicInterval);
+    nextLoopStartTime = 0;
+    musicInterval = setInterval(scheduleMusicLoop, 50); 
+}
+// --- END AUDIO ENGINES ---
+
+function initClouds() {
+    clouds = [];
+    for(let i = 0; i < 4; i++) {
+        clouds.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * (canvas.height * 0.5) + 30,
+            size: Math.random() * 30 + 30,
+            speed: Math.random() * 0.15 + 0.05
+        });
+    }
+}
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+    initClouds();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+class Balloon {
+    constructor(word, lane) {
+        this.word = word.toLowerCase();
+        this.lane = lane;
+        this.radiusX = 24; 
+        this.radiusY = 32;
+        this.height = 80;
+        
+        const columnWidth = canvas.width / LANES;
+        this.x = (columnWidth * lane) + (columnWidth / 2);
+        this.y = canvas.height + this.height; 
+        
+        this.isShaking = false;
+        this.shakeTimer = 0;
+        this.flashRed = false;
+
+        const balloonColors = ['#ef4444', '#f97316', '#22c55e', '#a855f7', '#06b6d4'];
+        this.color = balloonColors[lane % balloonColors.length];
+    }
+
+    draw() {
+        ctx.save();
+        let displayX = this.x;
+        if (this.isShaking) {
+            displayX += Math.sin(Date.now() * 0.05) * 8; 
+        }
+
+        let mainColor = this.flashRed ? '#ef4444' : this.color;
+
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(displayX, this.y + this.radiusY);
+        ctx.bezierCurveTo(displayX - 8, this.y + this.radiusY + 15, displayX + 8, this.y + this.radiusY + 30, displayX, this.y + this.radiusY + 50);
+        ctx.stroke();
+
+        ctx.fillStyle = mainColor;
+        ctx.beginPath();
+        ctx.moveTo(displayX, this.y + this.radiusY - 2);
+        ctx.lineTo(displayX - 6, this.y + this.radiusY + 6);
+        ctx.lineTo(displayX + 6, this.y + this.radiusY + 6);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.ellipse(displayX, this.y, this.radiusX, this.radiusY, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(displayX - 8, this.y - 12, 6, 10, Math.PI / 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(displayX - 32, this.y - 11, 64, 22);
+        ctx.strokeRect(displayX - 32, this.y - 11, 64, 22);
+
+        ctx.fillStyle = '#000000';
+        // Updated balloon text font to Comic Neue
+        ctx.font = 'bold 16px "Comic Neue", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.word, displayX, this.y + 1);
+        
+        ctx.restore();
+    }
+
+    update() {
+        this.y -= UNIFORM_SPEED; 
+
+        if (this.isShaking) {
+            this.shakeTimer -= 16;
+            if (this.shakeTimer <= 0) {
+                this.isShaking = false;
+                this.flashRed = false;
+            }
+        }
+    }
+}
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 11;
+        this.vy = (Math.random() - 0.5) * 11;
+        
+        this.radius = Math.random() * 5 + 2;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.04 + 0.025;
+        this.color = color; 
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color; 
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, this.radius, this.radius * 0.5, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.95; 
+        this.vy *= 0.95;
+        this.alpha -= this.decay;
+    }
+}
+
+function spawnBalloon() {
+    if (gameOver) return;
+    const lane = Math.floor(Math.random() * LANES);
+    
+    if (laneLastSpawnY[lane] > canvas.height - 150) return; 
+    
+    const isTarget = Math.random() < 0.4;
+    const word = isTarget ? targetWord : words[Math.floor(Math.random() * words.length)];
+    const newBalloon = new Balloon(word, lane);
+    balloons.push(newBalloon);
+    laneLastSpawnY[lane] = canvas.height;
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    if (total === 0) return 100;
+    return Math.round((correctTaps / total) * 100);
+}
+
+function drawUI() {
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.fillRect(30, 20, 250, 70);
+    ctx.strokeRect(30, 20, 250, 70);
+
+    ctx.fillStyle = '#0284c7';
+    // Updated prompt font target word box to Comic Neue
+    ctx.font = 'bold 42px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(targetWord, 155, 68);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 3;
+    ctx.fillRect(canvas.width - 280, 20, 250, 110);
+    ctx.strokeRect(canvas.width - 280, 20, 250, 110);
+
+    ctx.fillStyle = '#334155';
+    // Updated sidebar tracking metric texts to Comic Neue
+    ctx.font = 'bold 18px "Comic Neue", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Timer: ${timeLeft}s`, canvas.width - 260, 50);
+    ctx.fillText(`Pops: ${correctTaps}   Miss: ${incorrectTaps}`, canvas.width - 260, 80);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, canvas.width - 260, 110);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    // Updated End Screen Heading font layout to Comic Neue
+    ctx.font = 'bold 50px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText("🎈 Balloon Master Victory! 🎈", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Let's Try Again!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    // Updated End Screen Score metric values font to Comic Neue
+    ctx.font = '30px "Comic Neue", sans-serif';
+    ctx.fillText(`Final Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 40);
+}
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    clouds.forEach(cloud => {
+        cloud.x += cloud.speed;
+        if (cloud.x - cloud.size * 2 > canvas.width) cloud.x = -cloud.size * 2;
+        
+        ctx.beginPath();
+        ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.size * 0.6, cloud.y - cloud.size * 0.4, cloud.size * 0.8, 0, Math.PI * 2);
+        ctx.arc(cloud.x - cloud.size * 0.6, cloud.y - cloud.size * 0.2, cloud.size * 0.7, 0, Math.PI * 2);
+        ctx.arc(cloud.x + cloud.size * 1.2, cloud.y, cloud.size * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    for (let i = 0; i < LANES; i++) {
+        laneLastSpawnY[i] = -9999;
+    }
+    for (let i = balloons.length - 1; i >= 0; i--) {
+        let balloon = balloons[i];
+        balloon.update();
+        balloon.draw();
+        
+        if (balloon.y > laneLastSpawnY[balloon.lane]) {
+            laneLastSpawnY[balloon.lane] = balloon.y;
+        }
+        if (balloon.y < -balloon.height * 2) {
+            balloons.splice(i, 1);
+        }
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw();
+        if (particles[i].alpha <= 0) particles.splice(i, 1);
+    }
+    drawUI();
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudio(); 
+    if (gameOver) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    for (let i = balloons.length - 1; i >= 0; i--) {
+        let b = balloons[i];
+        if (x >= b.x - b.radiusX - 10 && x <= b.x + b.radiusX + 10 && y >= b.y - b.radiusY - 10 && y <= b.y + b.radiusY + 10) { 
+            if (b.word === targetWord) {
+                correctTaps++;
+                speakWord(targetWord); 
+                for (let p = 0; p < 20; p++) {
+                    particles.push(new Particle(b.x, b.y, b.color));
+                }
+                balloons.splice(i, 1);
+            } else {
+                if (!b.isShaking) {
+                    incorrectTaps++;
+                    playIncorrectSound(); 
+                    b.isShaking = true;
+                    b.shakeTimer = 500;
+                    b.flashRed = true;
+                }
+            }
+            break; 
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    initAudio(); 
+    clearInterval(gameInterval);
+    clearInterval(timerInterval);
+    clearInterval(musicInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    setTimeout(() => { speakWord(targetWord); }, 100);
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    balloons = [];
+    particles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    laneLastSpawnY = Array(LANES).fill(-9999);
+
+    gameInterval = setInterval(spawnBalloon, 1300); 
+    startMusicLoop(); 
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            clearInterval(gameInterval);
+            clearInterval(musicInterval);
+            if (gameWon) {
+                playWinSound();
+            } else {
+                playLoseSound();
+            }
+        }
+    }, 1000);
+
+    requestAnimationFrame(gameLoop);
+}
+restartGame();
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

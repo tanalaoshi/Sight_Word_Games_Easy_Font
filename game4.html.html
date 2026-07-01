@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Space Rockets</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Rocket Launch</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0e14;
+            /* Updated to uniform Comic Neue */
+            font-family: 'Comic Neue', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 80vh;
+            background: linear-gradient(to bottom, #000000 0%, #050b1a 40%, #10254c 75%, #3a7bd5 100%);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 20vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #10254c;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 40vw;
+            height: 10vh;
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 16px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Comic Neue', sans-serif;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 15px 30px;
+            background-color: #3a7bd5; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #1a4b8c;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">the, and, a, on, can</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let rockets = [];
+let particles = [];
+let stars = [];
+let gameInterval, timerInterval, musicInterval;
+let gameOver = false;
+let gameWon = false;
+
+const UNIFORM_SPEED = 1.1; 
+const LANES = 5; 
+let laneLastSpawnY = Array(LANES).fill(0); 
+
+// --- AUDIO & SPEECH ENGINES ---
+let audioCtx = null;
+let nextLoopStartTime = 0;
+
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        const utterance = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => 
+            v.lang.startsWith('en') && 
+            (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Natural'))
+        ) || voices.find(v => v.lang.startsWith('en'));
+        
+        if (preferredVoice) utterance.voice = preferredVoice;
+        utterance.rate = 0.85;  
+        utterance.pitch = 1.15; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playTrumpetNote(freq, duration, startTimeAbsolute, volume = 0.08) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    osc.type = 'sawtooth'; 
+    osc.frequency.setValueAtTime(freq, startTimeAbsolute);
+    
+    gainNode.gain.setValueAtTime(0, startTimeAbsolute);
+    gainNode.gain.linearRampToValueAtTime(volume, startTimeAbsolute + 0.02);
+    gainNode.gain.setValueAtTime(volume, startTimeAbsolute + (duration * 0.85));
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, startTimeAbsolute + duration);
+    
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    osc.start(startTimeAbsolute);
+    osc.stop(startTimeAbsolute + duration);
+}
+
+function playIncorrectSound() {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(130.81, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.2);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+}
+
+function playWinSound() {
+    const notes = [261.63, 329.63, 392.00, 523.25];
+    notes.forEach((freq, index) => {
+        playTrumpetNote(freq, 0.3, audioCtx.currentTime + (index * 0.08), 0.1);
+    });
+}
+
+function playLoseSound() {
+    const notes = [220.00, 196.00, 174.61];
+    notes.forEach((freq, index) => {
+        playTrumpetNote(freq, 0.4, audioCtx.currentTime + (index * 0.15), 0.1);
+    });
+}
+
+function scheduleMusicLoop() {
+    if (gameOver) return;
+
+    if (nextLoopStartTime < audioCtx.currentTime) {
+        nextLoopStartTime = audioCtx.currentTime + 0.05;
+    }
+
+    if (nextLoopStartTime < audioCtx.currentTime + 0.25) {
+        const tempo = 120; 
+        const beat = 60 / tempo;    
+        const eighth = beat / 2;    
+        
+        let t = nextLoopStartTime;
+
+        playTrumpetNote(196.00, (beat * 2) - 0.15, t); t += beat * 2;
+        playTrumpetNote(293.66, (beat * 2) - 0.15, t); t += beat * 2;
+        t += beat * 2; 
+
+        t += beat; 
+        playTrumpetNote(261.63, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(246.94, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(220.00, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(261.63, eighth - 0.015, t); t += eighth;
+        t += beat; 
+
+        t += beat; 
+        playTrumpetNote(246.94, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(220.00, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(196.00, eighth - 0.015, t); t += eighth;
+        playTrumpetNote(246.94, eighth - 0.015, t); t += eighth;
+        t += beat;
+
+        t += beat * 2;
+        nextLoopStartTime = t;
+    }
+}
+
+function startRocketMusicLoop() {
+    clearInterval(musicInterval);
+    nextLoopStartTime = 0;
+    musicInterval = setInterval(scheduleMusicLoop, 50); 
+}
+// --- END AUDIO ENGINES ---
+
+function initStars() {
+    stars = [];
+    for(let i = 0; i < 45; i++) {
+        stars.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * (canvas.height * 0.6), 
+            radius: Math.random() * 1.5 + 0.5,
+            alpha: Math.random() * 0.8 + 0.2
+        });
+    }
+}
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight * 0.8;
+    initStars();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// --- SLEEK ASCENDING ROCKET GRAPHICS ENGINE ---
+class Rocket {
+    constructor(word, lane) {
+        this.word = word.toLowerCase();
+        this.lane = lane;
+        this.width = 60;
+        this.height = 110;
+        
+        const columnWidth = canvas.width / LANES;
+        this.x = (columnWidth * lane) + (columnWidth / 2);
+        this.y = canvas.height + this.height; 
+        
+        this.isShaking = false;
+        this.shakeTimer = 0;
+        this.flashRed = false;
+    }
+
+    draw() {
+        ctx.save();
+        let displayX = this.x;
+        if (this.isShaking) {
+            displayX += Math.sin(Date.now() * 0.05) * 8; 
+        }
+
+        let bodyColor = this.flashRed ? '#ff4e4e' : '#f5f5f5';
+        let finColor = '#d32f2f'; 
+        let windowColor = '#b3e5fc'; 
+
+        // 1. Core Jet Engine Exhaust Flame
+        let flameHeight = Math.random() * 25 + 20;
+        let grad = ctx.createLinearGradient(displayX, this.y + 45, displayX, this.y + 45 + flameHeight);
+        grad.addColorStop(0, '#ffeb3b');
+        grad.addColorStop(0.4, '#ff9100');
+        grad.addColorStop(1, 'rgba(244,67,54,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(displayX - 10, this.y + 45);
+        ctx.lineTo(displayX, this.y + 45 + flameHeight);
+        ctx.lineTo(displayX + 10, this.y + 45);
+        ctx.closePath();
+        ctx.fill();
+
+        // 2. Swept Aerodynamic Side Booster Fins
+        ctx.fillStyle = finColor;
+        // Left Fin
+        ctx.beginPath();
+        ctx.moveTo(displayX - 16, this.y + 15);
+        ctx.lineTo(displayX - 32, this.y + 45);
+        ctx.lineTo(displayX - 16, this.y + 45);
+        ctx.closePath();
+        ctx.fill();
+        // Right Fin
+        ctx.beginPath();
+        ctx.moveTo(displayX + 16, this.y + 15);
+        ctx.lineTo(displayX + 32, this.y + 45);
+        ctx.lineTo(displayX + 16, this.y + 45);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3. Main Cylindrical Rocket Body Hull
+        ctx.fillStyle = bodyColor;
+        ctx.fillRect(displayX - 16, this.y - 15, 32, 60);
+
+        // 4. Heavy Metal Bottom Engine Nozzle Cup
+        ctx.fillStyle = '#757575';
+        ctx.fillRect(displayX - 10, this.y + 40, 20, 5);
+
+        // 5. Curved Nose Cone
+        ctx.fillStyle = finColor;
+        ctx.beginPath();
+        ctx.moveTo(displayX - 16, this.y - 15);
+        ctx.quadraticCurveTo(displayX - 14, this.y - 42, displayX, this.y - 45); 
+        ctx.quadraticCurveTo(displayX + 14, this.y - 42, displayX + 16, this.y - 15);
+        ctx.closePath();
+        ctx.fill();
+
+        // 6. Round Porthole Window
+        ctx.fillStyle = windowColor;
+        ctx.strokeStyle = '#757575';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(displayX, this.y - 18, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // 7. Sight Word White Text Frame Box
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeStyle = '#37474f';
+        ctx.lineWidth = 2;
+        ctx.fillRect(displayX - 35, this.y, 70, 24);
+        ctx.strokeRect(displayX - 35, this.y, 70, 24);
+
+        // 8. Sight Word Output
+        ctx.fillStyle = '#000000';
+        // Updated font inside rockets to Comic Neue
+        ctx.font = 'bold 18px "Comic Neue", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(this.word, displayX, this.y + 13);
+        
+        ctx.restore();
+    }
+
+    update() {
+        this.y -= UNIFORM_SPEED; 
+
+        if (this.isShaking) {
+            this.shakeTimer -= 16;
+            if (this.shakeTimer <= 0) {
+                this.isShaking = false;
+                this.flashRed = false;
+            }
+        }
+    }
+}
+
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.vx = (Math.random() - 0.5) * 9;
+        this.vy = (Math.random() - 0.5) * 9;
+        this.radius = Math.random() * 6 + 3;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.025 + 0.015;
+        
+        const colors = ['#ff3d00', '#ff9100', '#ffea00', '#ff5722'];
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color; 
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vx *= 0.98; 
+        this.vy *= 0.98;
+        this.alpha -= this.decay;
+    }
+}
+
+function spawnRocket() {
+    if (gameOver) return;
+    const lane = Math.floor(Math.random() * LANES);
+    
+    if (laneLastSpawnY[lane] > canvas.height - 180) return; 
+    
+    const isTarget = Math.random() < 0.4;
+    const word = isTarget ? targetWord : words[Math.floor(Math.random() * words.length)];
+    const newRocket = new Rocket(word, lane);
+    rockets.push(newRocket);
+    laneLastSpawnY[lane] = canvas.height;
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    if (total === 0) return 100;
+    return Math.round((correctTaps / total) * 100);
+}
+
+function drawUI() {
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.fillRect(30, 20, 250, 70);
+    ctx.strokeRect(30, 20, 250, 70);
+
+    ctx.fillStyle = '#000000';
+    // Updated Target Box font to Comic Neue
+    ctx.font = 'bold 42px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(targetWord, 155, 68);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillRect(canvas.width - 280, 20, 250, 110);
+    ctx.strokeRect(canvas.width - 280, 20, 250, 110);
+
+    ctx.fillStyle = '#333333';
+    // Updated Dashboard text font to Comic Neue
+    ctx.font = 'bold 18px "Comic Neue", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Timer: ${timeLeft}s`, canvas.width - 260, 50);
+    ctx.fillText(`Hits: ${correctTaps}   Wrong: ${incorrectTaps}`, canvas.width - 260, 80);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#2e7d32' : '#c62828';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, canvas.width - 260, 110);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    // Updated End Screen Header to Comic Neue
+    ctx.font = 'bold 50px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#00e676';
+        ctx.fillText("🎉 Cosmic Commander Wins! 🎉", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#ff1744';
+        ctx.fillText("Try Again!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    // Updated End Screen Subtext to Comic Neue
+    ctx.font = '30px "Comic Neue", sans-serif';
+    ctx.fillText(`Final Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 40);
+}
+
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#ffffff';
+    stars.forEach(star => {
+        ctx.save();
+        ctx.globalAlpha = star.alpha * (0.6 + Math.sin(Date.now() * 0.005 + star.x) * 0.4); 
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+
+    for (let i = 0; i < LANES; i++) {
+        laneLastSpawnY[i] = -9999;
+    }
+    for (let i = rockets.length - 1; i >= 0; i--) {
+        let rocket = rockets[i];
+        rocket.update();
+        rocket.draw();
+        
+        if (rocket.y > laneLastSpawnY[rocket.lane]) {
+            laneLastSpawnY[rocket.lane] = rocket.y;
+        }
+        if (rocket.y < -rocket.height * 2) {
+            rockets.splice(i, 1);
+        }
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw();
+        if (particles[i].alpha <= 0) particles.splice(i, 1);
+    }
+    drawUI();
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudio(); 
+    if (gameOver) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    for (let i = rockets.length - 1; i >= 0; i--) {
+        let rocket = rockets[i];
+        if (x >= rocket.x - 35 && x <= rocket.x + 35 && y >= rocket.y - 45 && y <= rocket.y + 45) { 
+            if (rocket.word === targetWord) {
+                correctTaps++;
+                speakWord(targetWord); 
+                for (let p = 0; p < 25; p++) {
+                    particles.push(new Particle(rocket.x, rocket.y + 10));
+                }
+                rockets.splice(i, 1);
+            } else {
+                if (!rocket.isShaking) {
+                    incorrectTaps++;
+                    playIncorrectSound(); 
+                    rocket.isShaking = true;
+                    rocket.shakeTimer = 500;
+                    rocket.flashRed = true;
+                }
+            }
+            break; 
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    initAudio(); 
+    clearInterval(gameInterval);
+    clearInterval(timerInterval);
+    clearInterval(musicInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    setTimeout(() => { speakWord(targetWord); }, 100);
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    rockets = [];
+    particles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    laneLastSpawnY = Array(LANES).fill(-9999);
+
+    gameInterval = setInterval(spawnRocket, 1200); 
+    startRocketMusicLoop(); 
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            clearInterval(gameInterval);
+            clearInterval(musicInterval);
+            if (gameWon) {
+                playWinSound();
+            } else {
+                playLoseSound();
+            }
+        }
+    }, 1000);
+
+    requestAnimationFrame(gameLoop);
+}
+restartGame();
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

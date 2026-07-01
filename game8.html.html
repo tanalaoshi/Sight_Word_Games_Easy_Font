@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Duck Pond</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Duck Pond Feed</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0c4a6e;
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 75vh;
+            min-height: 400px;
+            background: #075985; 
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Audio Unlock Overlay */
+        #audio-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(7, 89, 133, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            color: white;
+            text-align: center;
+        }
+        #audio-overlay h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #facc15;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #start-audio-btn {
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 22px;
+            font-weight: bold;
+            padding: 15px 40px;
+            background-color: #0284c7;
+            color: #ffffff;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #0369a1;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        #start-audio-btn:active {
+            transform: translateY(6px) scale(1);
+            box-shadow: none;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 25vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #0284c7;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 45vw;
+            height: 14vh;
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 15px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #0284c7; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #0369a1;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="audio-overlay">
+        <h1>🦆 Sight Word Duck Pond 🦆</h1>
+        <button id="start-audio-btn" onclick="startWithAudio()">TAP TO PLAY WITH MUSIC!</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">the, a, to</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let gameOver = false;
+let gameWon = false;
+
+const DUCK_COUNT = 3;
+let ducks = [];
+let bread = { x: 0, y: 0, startX: 0, startY: 0, targetX: 0, targetY: 0, progress: 1, state: 'idle', targetDuckIdx: -1, rotation: 0 };
+let activeParticles = [];
+let lilyPads = [];
+
+const WORD_DISPLAY_DURATION = 4500; 
+let wordSwitchTimer = 0;
+let timerInterval = null;
+
+// --- CIRCUS/UPBEAT SYNTHETIC AUDIO CONFIG ---
+let audioCtx = null; 
+let musicInterval = null;
+let currentBeat = 0;
+
+function startWithAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+
+    document.getElementById('audio-overlay').style.display = 'none';
+
+    if (!musicInterval) {
+        musicInterval = setInterval(playCircusMusicScheduler, 240); 
+    }
+
+    speakWord(targetWord);
+}
+
+function initAudioContextOnly() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playCircusMusicScheduler() {
+    if (!audioCtx || gameOver) return;
+    let t = audioCtx.currentTime;
+
+    // 1. Bass Track
+    let bassOsc = audioCtx.createOscillator();
+    let bassGain = audioCtx.createGain();
+    bassOsc.type = 'triangle';
+    let bassFreq = (currentBeat % 2 === 0) ? 130.81 : 98.00; 
+    bassOsc.frequency.setValueAtTime(bassFreq, t);
+    bassGain.gain.setValueAtTime(0.35, t);
+    bassGain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    bassOsc.connect(bassGain);
+    bassGain.connect(audioCtx.destination);
+    bassOsc.start(t);
+    bassOsc.stop(t + 0.24);
+
+    // 2. Melody Track
+    let melodyOsc = audioCtx.createOscillator();
+    let melodyGain = audioCtx.createGain();
+    melodyOsc.type = 'sine'; 
+    const notes = [523.25, 587.33, 659.25, 698.46, 783.99, 698.46, 659.25, 587.33];
+    let noteIdx = currentBeat % notes.length;
+    melodyOsc.frequency.setValueAtTime(notes[noteIdx], t);
+    melodyGain.gain.setValueAtTime(0.06, t);
+    melodyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    melodyOsc.connect(melodyGain);
+    melodyGain.connect(audioCtx.destination);
+    melodyOsc.start(t);
+    melodyOsc.stop(t + 0.2);
+
+    // 3. Cymbal Accent
+    if (currentBeat % 4 === 2) {
+        let bellOsc = audioCtx.createOscillator();
+        let bellGain = audioCtx.createGain();
+        bellOsc.type = 'triangle';
+        bellOsc.frequency.setValueAtTime(3000, t);
+        bellGain.gain.setValueAtTime(0.02, t);
+        bellGain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        bellOsc.connect(bellGain);
+        bellGain.connect(audioCtx.destination);
+        bellOsc.start(t);
+        bellOsc.stop(t + 0.09);
+    }
+
+    currentBeat = (currentBeat + 1) % 16;
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        
+        // --- NATURAL PHONETIC TRANSLATOR ---
+        let voiceText = text.toLowerCase().trim();
+        if (voiceText === 'a') {
+            voiceText = 'uh';
+        } else if (voiceText === 'the') {
+            voiceText = 'thee'; 
+        }
+
+        const utterance = new SpeechSynthesisUtterance(voiceText);
+        utterance.rate = 0.95;  
+        utterance.pitch = 1.1; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playWaterWhoosh() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.12, audioCtx.currentTime + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.22);
+}
+
+function playQuackSound() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    
+    // Happy rapid quacking synthesizers
+    for (let i = 0; i < 2; i++) {
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'sawtooth'; 
+        osc.frequency.setValueAtTime(320, t + (i * 0.12));
+        osc.frequency.linearRampToValueAtTime(440, t + (i * 0.12) + 0.06);
+        
+        let filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(800, t);
+        
+        gain.gain.setValueAtTime(0.15, t + (i * 0.12));
+        gain.gain.exponentialRampToValueAtTime(0.001, t + (i * 0.12) + 0.09);
+        
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t + (i * 0.12));
+        osc.stop(t + (i * 0.12) + 0.1);
+    }
+}
+
+function playSadSplash() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(180, t);
+    osc.frequency.linearRampToValueAtTime(90, t + 0.25);
+    gain.gain.setValueAtTime(0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.26);
+}
+
+function resizeCanvas() {
+    let targetWidth = window.innerWidth || 800;
+    let targetHeight = (window.innerHeight * 0.75) || 500;
+    
+    const container = document.getElementById('game-container');
+    if (container) {
+        let rect = container.getBoundingClientRect();
+        if (rect.width > 0) targetWidth = rect.width;
+        if (rect.height > 0) targetHeight = rect.height;
+    }
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    resetDuckCoordinates();
+    generateLilyPads();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function generateLilyPads() {
+    lilyPads = [];
+    for (let i = 0; i < 8; i++) {
+        lilyPads.push({
+            x: Math.random() * canvas.width,
+            y: canvas.height * 0.1 + (Math.random() * canvas.height * 0.45),
+            size: Math.random() * 15 + 15,
+            angle: Math.random() * Math.PI,
+            hasFlower: Math.random() > 0.6
+        });
+    }
+}
+
+function resetDuckCoordinates() {
+    const oldDucks = ducks;
+    ducks = [];
+    const segment = canvas.width / DUCK_COUNT;
+    let calculatedY = canvas.height * 0.32; 
+
+    for (let i = 0; i < DUCK_COUNT; i++) {
+        ducks.push({
+            baseX: (segment * i) + (segment / 2),
+            baseY: calculatedY,
+            x: (segment * i) + (segment / 2),
+            y: calculatedY,
+            swimOffset: Math.random() * 100, // randomized phase
+            word: oldDucks[i] ? oldDucks[i].word : '',
+            isTarget: oldDucks[i] ? oldDucks[i].isTarget : false,
+            wasHit: oldDucks[i] ? oldDucks[i].wasHit : false,
+            shakeTimer: 0,
+            munchTimer: 0
+        });
+    }
+}
+
+function populateDucks() {
+    if (words.length === 0) return;
+    playWaterWhoosh();
+    
+    let randPattern = Math.random();
+    for (let i = 0; i < DUCK_COUNT; i++) {
+        ducks[i].wasHit = false;
+        ducks[i].shakeTimer = 0;
+        ducks[i].munchTimer = 0;
+        
+        let selectTarget = false;
+        if (randPattern < 0.65) {
+            selectTarget = (i === Math.floor(randPattern * 10) % DUCK_COUNT) || (Math.random() < 0.2);
+        } else if (randPattern < 0.85) {
+            selectTarget = true;
+        } else {
+            selectTarget = false;
+        }
+
+        if (selectTarget) {
+            ducks[i].word = targetWord;
+            ducks[i].isTarget = true;
+        } else {
+            let stray = words[Math.floor(Math.random() * words.length)];
+            ducks[i].word = (stray === targetWord) ? words[(words.indexOf(stray) + 1) % words.length] || 'and' : stray;
+            ducks[i].isTarget = false;
+        }
+    }
+    wordSwitchTimer = Date.now();
+}
+
+class PopParticle {
+    constructor(x, y, color, type = 'dot') {
+        this.x = x; this.y = y;
+        this.type = type;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vy = type === 'crumb' ? -Math.random() * 4 - 2 : (Math.random() - 0.5) * 4;
+        this.radius = type === 'crumb' ? Math.random() * 3 + 2 : Math.random() * 5 + 3;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.05 + 0.03;
+        this.color = color;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        if (this.type === 'crumb') this.vy += 0.15; 
+        this.alpha -= this.decay;
+    }
+}
+
+function drawPondBackground() {
+    // Beautiful deep water lake
+    ctx.fillStyle = '#0284c7'; 
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Gentle water ripple textures
+    ctx.strokeStyle = '#0ea5e9';
+    ctx.lineWidth = 2;
+    let loopTime = Date.now() * 0.001;
+    for (let r = 0; r < 5; r++) {
+        let rx = (r * 230 + loopTime * 20) % (canvas.width + 100) - 50;
+        let ry = (r * 90) % (canvas.height * 0.6) + 30;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 40, 0, Math.PI, false);
+        ctx.stroke();
+    }
+
+    // Render Cute Lily Pads and Blooms
+    lilyPads.forEach(pad => {
+        ctx.save();
+        ctx.translate(pad.x, pad.y);
+        ctx.fillStyle = '#15803d'; // Rich lilypad green
+        ctx.beginPath();
+        // Draw circle with a wedge cut out for classic lilypad look
+        ctx.arc(0, 0, pad.size, 0.4, Math.PI * 2 - 0.4);
+        ctx.lineTo(0,0);
+        ctx.closePath();
+        ctx.fill();
+
+        if (pad.hasFlower) {
+            ctx.fillStyle = '#f472b6'; // Pretty pink lotus bloom
+            for(let f=0; f<5; f++) {
+                ctx.rotate(Math.PI / 2.5);
+                ctx.beginPath();
+                ctx.ellipse(pad.size*0.4, 0, pad.size*0.3, pad.size*0.15, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+            ctx.fillStyle = '#facc15'; // yellow center
+            ctx.beginPath();
+            ctx.arc(0, 0, pad.size*0.18, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.restore();
+    });
+}
+
+function drawDucks() {
+    if (ducks.length === 0) return;
+    let scaleFactor = canvas.width < 600 ? 0.8 : 1.05;
+    let time = Date.now();
+
+    ducks.forEach(d => {
+        // --- SWIMMING MOTIONS LOGIC ---
+        // Ducks slide smoothly in small circles around their base coordinates
+        let phase = time * 0.002 + d.swimOffset;
+        let swimX = Math.cos(phase) * 15;
+        let swimY = Math.sin(phase * 1.5) * 8;
+
+        let shakeOffsetX = 0;
+        if (d.shakeTimer > 0) {
+            shakeOffsetX = Math.sin(time * 0.08) * 8;
+            d.shakeTimer -= 16;
+        }
+        if (d.munchTimer > 0) {
+            d.munchTimer -= 16;
+        }
+
+        d.x = d.baseX + swimX + shakeOffsetX;
+        d.y = d.baseY + swimY;
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+
+        // Water ripple ring underneath the floating duck body
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 15*scaleFactor, 25*scaleFactor, 8*scaleFactor, 0, 0, Math.PI*2);
+        ctx.stroke();
+
+        // 1. Duck Plump Floating Body (Horizontal orientation ellipse)
+        ctx.fillStyle = '#facc15'; // Vibrant sunny duckling yellow
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 24 * scaleFactor, 16 * scaleFactor, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Wing overlay
+        ctx.fillStyle = '#eab308';
+        ctx.beginPath();
+        ctx.ellipse(-4 * scaleFactor, -2 * scaleFactor, 12 * scaleFactor, 7 * scaleFactor, 0.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 3. Upturned Fluffy Tail feathers
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.moveTo(-22 * scaleFactor, -4 * scaleFactor);
+        ctx.lineTo(-30 * scaleFactor, -14 * scaleFactor);
+        ctx.lineTo(-14 * scaleFactor, -10 * scaleFactor);
+        ctx.closePath();
+        ctx.fill();
+
+        // 4. Round Duck Head
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.arc(16 * scaleFactor, -15 * scaleFactor, 13 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 5. Cute Small Eye
+        ctx.fillStyle = '#1e293b';
+        ctx.beginPath();
+        ctx.arc(19 * scaleFactor, -18 * scaleFactor, 2.5 * scaleFactor, 0, Math.PI * 2);
+        ctx.fill();
+
+        // --- SPECIFIC HORIZONTAL DUCK BEAK ENGINE ---
+        ctx.fillStyle = '#f97316'; // Bright orange duck beak
+        ctx.strokeStyle = '#c2410c';
+        ctx.lineWidth = 1.5;
+
+        let hX = 26 * scaleFactor;  // Head attachment point X
+        let bLen = 14 * scaleFactor; // Length of beak outward right
+
+        if (d.munchTimer > 0) {
+            // Rapid vertical snapping scissor crunch sequence
+            let snapPhase = Math.floor(time / 100) % 2;
+            if (snapPhase === 0) {
+                // Beak Opened wide
+                // Top bill
+                ctx.beginPath();
+                ctx.moveTo(hX, -16 * scaleFactor);
+                ctx.lineTo(hX + bLen, -21 * scaleFactor);
+                ctx.lineTo(hX + 4*scaleFactor, -13 * scaleFactor);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+                // Bottom bill
+                ctx.beginPath();
+                ctx.moveTo(hX + 4*scaleFactor, -13 * scaleFactor);
+                ctx.lineTo(hX + bLen - 2*scaleFactor, -9 * scaleFactor);
+                ctx.lineTo(hX, -10 * scaleFactor);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+            } else {
+                // Beak tightly shut closed line flat
+                ctx.beginPath();
+                ctx.moveTo(hX, -15 * scaleFactor);
+                ctx.lineTo(hX + bLen, -15 * scaleFactor);
+                ctx.lineTo(hX, -10 * scaleFactor);
+                ctx.closePath();
+                ctx.fill(); ctx.stroke();
+            }
+        } else {
+            // Normal static sweet duck bill flat profile shape
+            ctx.beginPath();
+            ctx.moveTo(hX, -16 * scaleFactor);
+            ctx.quadraticCurveTo(hX + bLen, -18 * scaleFactor, hX + bLen, -14 * scaleFactor);
+            ctx.lineTo(hX, -10 * scaleFactor);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        ctx.restore();
+
+        // Word signboard cards
+        if (!d.wasHit) {
+            ctx.save();
+            let labelW = 90 * scaleFactor;
+            let labelH = 24 * scaleFactor;
+            ctx.fillStyle = '#ffffff'; 
+            ctx.strokeStyle = '#0369a1';
+            ctx.lineWidth = 2;
+            // Placed squarely above the swimming coordinate center
+            ctx.fillRect(d.x - labelW/2, d.baseY - 55 * scaleFactor, labelW, labelH);
+            ctx.strokeRect(d.x - labelW/2, d.baseY - 55 * scaleFactor, labelW, labelH);
+            
+            ctx.fillStyle = '#0c4a6e';
+            ctx.font = `bold ${Math.floor(14 * scaleFactor)}px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(d.word || '', d.x, d.baseY - 42 * scaleFactor);
+            ctx.restore();
+        }
+    });
+}
+
+function drawBreadProjectile() {
+    let radius = canvas.width < 600 ? 12 : 16;
+    if (bread.state === 'idle') {
+        bread.x = canvas.width / 2;
+        bread.y = canvas.height - radius - 15;
+        bread.rotation = 0;
+    }
+    
+    ctx.save();
+    // Shadow under bread piece
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.beginPath();
+    ctx.ellipse(bread.x, canvas.height - 15, radius * 1.2 * (bread.y / canvas.height), 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(bread.x, bread.y);
+    ctx.rotate(bread.rotation);
+    
+    // Golden baked bread cube loaf slice style
+    ctx.fillStyle = '#b45309'; // crust outline
+    ctx.fillRect(-radius, -radius, radius*2, radius*2);
+    
+    ctx.fillStyle = '#fef08a'; // soft bread interior crumb center
+    ctx.fillRect(-radius + 2, -radius + 2, radius*2 - 4, radius*2 - 4);
+
+    ctx.restore();
+}
+
+function updateBreadMotion() {
+    if (bread.state === 'flying') {
+        bread.progress += 0.08; 
+        bread.rotation += 0.15; 
+        if (bread.progress >= 1) {
+            bread.progress = 1;
+            bread.state = 'idle';
+            checkBreadResult(bread.targetDuckIdx);
+        }
+        let progress = bread.progress;
+        bread.x = bread.startX + (bread.targetX - bread.startX) * progress;
+        let linearY = bread.startY + (bread.targetY - bread.startY) * progress;
+        let arcHeight = Math.sin(progress * Math.PI) * (canvas.height * 0.22); 
+        bread.y = linearY - arcHeight;
+    }
+}
+
+function checkBreadResult(idx) {
+    let d = ducks[idx];
+    if (!d || d.wasHit) return;
+
+    if (d.word === targetWord) {
+        correctTaps++;
+        d.wasHit = true;
+        d.munchTimer = 1600; 
+        speakWord(targetWord);
+        playQuackSound();
+        
+        // Dynamic bread crumb shatter splash particle effect
+        for (let i = 0; i < 6; i++) {
+            activeParticles.push(new PopParticle(d.x, d.y, '#38bdf8', 'splash')); // water drop bursts
+        }
+        for (let i = 0; i < 15; i++) {
+            activeParticles.push(new PopParticle(d.x, d.y, '#fef08a', 'crumb')); // floating bread bits
+        }
+    } else {
+        incorrectTaps++;
+        d.shakeTimer = 500;
+        playSadSplash();
+        for (let i = 0; i < 12; i++) {
+            activeParticles.push(new PopParticle(d.x, d.y, '#0284c7', 'splash'));
+        }
+    }
+}
+
+function drawUI() {
+    let duckY = ducks[0] ? ducks[0].baseY : canvas.height * 0.32;
+    let targetBoxY = duckY + canvas.height * 0.18; 
+    
+    let boxW = Math.min(220, canvas.width * 0.5);
+    let boxH = Math.min(50, canvas.height * 0.12);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 4;
+    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+
+    ctx.fillStyle = '#0369a1';
+    ctx.font = `bold ${boxH * 0.55}px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+
+    let scoreBoxW = canvas.width < 600 ? 190 : 230;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+    ctx.strokeStyle = '#7dd3fc';
+    ctx.lineWidth = 2;
+    ctx.fillRect(15, 15, scoreBoxW, 85);
+    ctx.strokeRect(15, 15, scoreBoxW, 85);
+
+    ctx.fillStyle = '#0369a1';
+    ctx.font = 'bold 14px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 35);
+    ctx.fillText(`Fed Ducks: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 55);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    return total === 0 ? 100 : Math.round((correctTaps / total) * 100);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 32px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText("🦆 Ultimate Pond Ranger Victory! 🦆", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Nice Try! Let's Feed Again!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '20px "Chalkboard SE", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.fillText(`Final Feeding Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 30);
+}
+
+function gameLoop() {
+    if (!gameOver && Date.now() - wordSwitchTimer >= WORD_DISPLAY_DURATION) {
+        populateDucks();
+    }
+
+    drawPondBackground();
+    drawDucks();
+    updateBreadMotion();
+    drawBreadProjectile();
+
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        activeParticles[i].update();
+        activeParticles[i].draw();
+        if (activeParticles[i].alpha <= 0) activeParticles.splice(i, 1);
+    }
+
+    drawUI();
+
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudioContextOnly(); 
+    if (gameOver || bread.state === 'flying') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    let hitRange = canvas.width < 600 ? 50 : 75;
+
+    for (let i = 0; i < DUCK_COUNT; i++) {
+        let d = ducks[i];
+        // Target hitbox tracking the dynamic swimming coordinates smoothly
+        if (x >= d.x - hitRange && x <= d.x + hitRange && y >= d.y - 45 && y <= d.y + 40) {
+            if (d.wasHit) break; 
+            
+            let radius = canvas.width < 600 ? 12 : 16;
+            bread.startX = canvas.width / 2;
+            bread.startY = canvas.height - radius - 15;
+            bread.targetX = d.x;
+            bread.targetY = d.y;
+            bread.progress = 0;
+            bread.targetDuckIdx = i;
+            bread.state = 'flying';
+            break;
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    
+    if (audioCtx && document.getElementById('audio-overlay').style.display === 'none') { 
+        speakWord(targetWord); 
+    }
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    activeParticles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    bread.state = 'idle';
+
+    resizeCanvas();
+    populateDucks();
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+            if (gameWon) playQuackSound(); else playSadSplash();
+        }
+    }, 1000);
+}
+
+window.onload = function() {
+    resizeCanvas();
+    restartGame();
+    requestAnimationFrame(gameLoop);
+    setTimeout(resizeCanvas, 100);
+    setTimeout(resizeCanvas, 500);
+};
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>

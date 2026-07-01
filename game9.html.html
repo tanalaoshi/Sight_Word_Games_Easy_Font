@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8">
+    <title>Sight Word Wack-a-Mole</title>
+    
+
+  </head>
+    
+  <body>
+  <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sight Word Whack-a-Mole</title>
+    <!-- Embedded Readable Early-Reader Font Resource Stack -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Comic+Neue:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #14532d;
+            /* Prioritizes hyper-legible educational fonts over basic system defaults */
+            font-family: 'Andika', 'Comic Neue', 'Comic Sans MS', sans-serif;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 75vh;
+            min-height: 400px;
+            background: #15803d; 
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* Audio Unlock Overlay */
+        #audio-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(21, 128, 61, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            color: white;
+            text-align: center;
+        }
+        #audio-overlay h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #facc15;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        #start-audio-btn {
+            font-family: 'Andika', 'Comic Neue', sans-serif;
+            font-size: 22px;
+            font-weight: bold;
+            padding: 15px 40px;
+            background-color: #eab308;
+            color: #1e3a8a;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #ca8a04;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.05); }
+        }
+        #start-audio-btn:active {
+            transform: translateY(6px) scale(1);
+            box-shadow: none;
+        }
+        #control-panel {
+            width: 100vw;
+            height: 25vh;
+            background-color: #ffffff;
+            box-sizing: border-box;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            border-top: 4px solid #ca8a04;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+        }
+        textarea {
+            width: 45vw;
+            height: 14vh;
+            font-family: 'Andika', 'Comic Neue', sans-serif;
+            font-size: 15px;
+            padding: 5px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            resize: none;
+        }
+        button {
+            font-family: 'Andika', 'Comic Neue', sans-serif;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 12px 24px;
+            background-color: #ca8a04; 
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #854d0e;
+        }
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="audio-overlay">
+        <h1>🔨 Sight Word Whack-a-Mole 🐹</h1>
+        <button id="start-audio-btn" onclick="startWithAudio()">TAP TO PLAY WITH MUSIC!</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div id="control-panel">
+    <div class="input-group">
+        <label for="wordList">Custom Words (comma-separated):</label>
+        <textarea id="wordList">the, a, to, OK</textarea>
+    </div>
+    <button onclick="restartGame()">Update & Restart</button>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let words = [];
+let targetWord = '';
+let timeLeft = 60;
+let correctTaps = 0;
+let incorrectTaps = 0;
+let gameOver = false;
+let gameWon = false;
+
+// --- MOLE & HOLE CONFIG ---
+const HOLE_COUNT = 6;
+let holes = []; 
+
+// --- MALLET ANIMATION ENGINE ---
+let mallet = {
+    x: 0, y: 0, 
+    startX: 0, startY: 0, 
+    targetX: 0, targetY: 0, 
+    progress: 1, 
+    state: 'idle', 
+    swingTimer: 0,
+    shakeTimer: 0,
+    isRed: false
+};
+
+let activeParticles = [];
+let timerInterval = null;
+
+// --- SYNTHETIC AUDIO CONFIG ---
+let audioCtx = null; 
+let musicInterval = null;
+let currentBeat = 0;
+
+function startWithAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    document.getElementById('audio-overlay').style.display = 'none';
+
+    if (!musicInterval) {
+        musicInterval = setInterval(playArcusMusicScheduler, 220); 
+    }
+    speakWord(targetWord);
+}
+
+function initAudioContextOnly() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
+
+function playArcusMusicScheduler() {
+    if (!audioCtx || gameOver) return;
+    let t = audioCtx.currentTime;
+
+    let bassOsc = audioCtx.createOscillator();
+    let bassGain = audioCtx.createGain();
+    bassOsc.type = 'triangle';
+    let notesBass = [110.00, 110.00, 146.83, 164.81];
+    bassOsc.frequency.setValueAtTime(notesBass[currentBeat % 4], t);
+    bassGain.gain.setValueAtTime(0.25, t);
+    bassGain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    bassOsc.connect(bassGain);
+    bassGain.connect(audioCtx.destination);
+    bassOsc.start(t);
+    bassOsc.stop(t + 0.2);
+
+    let melOsc = audioCtx.createOscillator();
+    let melGain = audioCtx.createGain();
+    melOsc.type = 'sine';
+    let notesMel = [440, 493.88, 523.25, 587.33, 659.25, 587.33, 523.25, 493.88];
+    melOsc.frequency.setValueAtTime(notesMel[currentBeat % notesMel.length], t);
+    melGain.gain.setValueAtTime(0.05, t);
+    melGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    melOsc.connect(melGain);
+    melGain.connect(audioCtx.destination);
+    melOsc.start(t);
+    melOsc.stop(t + 0.16);
+
+    currentBeat = (currentBeat + 1) % 16;
+}
+
+function speakWord(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel(); 
+        
+        let voiceText = text.toLowerCase().trim();
+        if (voiceText === 'a') {
+            voiceText = 'uh';
+        } else if (voiceText === 'the') {
+            voiceText = 'thee'; 
+        }
+
+        const utterance = new SpeechSynthesisUtterance(voiceText);
+        utterance.rate = 0.95;  
+        utterance.pitch = 1.1; 
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function playPopSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(500, audioCtx.currentTime + 0.08);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+}
+
+function playSqueakSound() {
+    if (!audioCtx) return;
+    let t = audioCtx.currentTime;
+    let osc1 = audioCtx.createOscillator();
+    let gain1 = audioCtx.createGain();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(800, t);
+    osc1.frequency.linearRampToValueAtTime(1500, t + 0.06);
+    gain1.gain.setValueAtTime(0.25, t);
+    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start();
+    osc1.stop(t + 0.09);
+}
+
+function playBuzzSound() {
+    if (!audioCtx) return;
+    let osc = audioCtx.createOscillator();
+    let gain = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(110, audioCtx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.23);
+}
+
+function resizeCanvas() {
+    let targetWidth = window.innerWidth || 800;
+    let targetHeight = (window.innerHeight * 0.75) || 500;
+    
+    const container = document.getElementById('game-container');
+    if (container) {
+        let rect = container.getBoundingClientRect();
+        if (rect.width > 0) targetWidth = rect.width;
+        if (rect.height > 0) targetHeight = rect.height;
+    }
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    initHoles();
+}
+window.addEventListener('resize', resizeCanvas);
+
+function initHoles() {
+    holes = [];
+    const cols = 3;
+    const rows = 2;
+    const cellW = canvas.width / cols;
+    const cellH = (canvas.height * 0.6) / rows;
+    const startY = canvas.height * 0.25;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            let stagger = (r % 2 === 1) ? cellW * 0.15 : -cellW * 0.15;
+            holes.push({
+                x: (cellW * c) + (cellW / 2) + stagger,
+                y: startY + (cellH * r) + (cellH / 2),
+                moleState: 'down', 
+                moleYOffset: 0, 
+                word: '',
+                isTarget: false,
+                stateTimer: 0,
+                nextActionTime: Date.now() + Math.random() * 2000
+            });
+        }
+    }
+}
+
+function updateIndependentMoles() {
+    if (gameOver) return;
+    const time = Date.now();
+
+    holes.forEach(h => {
+        switch (h.moleState) {
+            case 'down':
+                if (time >= h.nextActionTime) {
+                    h.moleState = 'upping';
+                    assignWordToMole(h);
+                    playPopSound();
+                }
+                break;
+            case 'upping':
+                h.moleYOffset += 0.12; 
+                if (h.moleYOffset >= 1) {
+                    h.moleYOffset = 1;
+                    h.moleState = 'up';
+                    h.stateTimer = time + 2000 + Math.random() * 1500; 
+                }
+                break;
+            case 'up':
+                if (time >= h.stateTimer) {
+                    h.moleState = 'downing';
+                }
+                break;
+            case 'downing':
+                h.moleYOffset -= 0.08;
+                if (h.moleYOffset <= 0) {
+                    h.moleYOffset = 0;
+                    h.moleState = 'down';
+                    h.nextActionTime = time + 1000 + Math.random() * 3000; 
+                }
+                break;
+            case 'whacked':
+                h.moleYOffset -= 0.15; 
+                if (h.moleYOffset <= 0) {
+                    h.moleYOffset = 0;
+                    h.moleState = 'down';
+                    h.nextActionTime = time + 1500 + Math.random() * 3000;
+                }
+                break;
+        }
+    });
+}
+
+function assignWordToMole(hole) {
+    if (words.length === 0) return;
+    let activeTargets = holes.filter(h => h.moleState !== 'down' && h.isTarget).length;
+    let wantTarget = Math.random() < 0.45 || activeTargets === 0;
+
+    if (wantTarget) {
+        hole.word = targetWord;
+        hole.isTarget = true;
+    } else {
+        let stray = words[Math.floor(Math.random() * words.length)];
+        hole.word = (stray === targetWord) ? words[(words.indexOf(stray) + 1) % words.length] || 'and' : stray;
+        hole.isTarget = false;
+    }
+}
+
+class DirtParticle {
+    constructor(x, y) {
+        this.x = x; this.y = y;
+        this.vx = (Math.random() - 0.5) * 6;
+        this.vy = -Math.random() * 5 - 2;
+        this.radius = Math.random() * 4 + 2;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.06 + 0.04;
+    }
+    draw() {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = '#7c2d12';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+    update() {
+        this.x += this.vx; this.y += this.vy;
+        this.vy += 0.2; 
+        this.alpha -= this.decay;
+    }
+}
+
+function drawScenery() {
+    ctx.fillStyle = '#16a34a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let scale = canvas.width < 600 ? 0.75 : 1.0;
+    let radiusX = 55 * scale;
+    let radiusY = 16 * scale;
+
+    holes.forEach(h => {
+        ctx.fillStyle = '#451a03';
+        ctx.beginPath();
+        ctx.ellipse(h.x, h.y + 10, radiusX, radiusY, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (h.moleYOffset > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(h.x - radiusX - 20, h.y - 100*scale, (radiusX + 20)*2, 112*scale);
+            ctx.clip();
+
+            let currentMoleY = h.y + 10 - (h.moleYOffset * 55 * scale);
+
+            ctx.fillStyle = '#a16207'; 
+            ctx.beginPath();
+            ctx.ellipse(h.x, currentMoleY + 25*scale, 28*scale, 32*scale, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.ellipse(h.x, currentMoleY + 18*scale, 18*scale, 12*scale, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = '#f472b6';
+            ctx.beginPath();
+            ctx.arc(h.x, currentMoleY + 12*scale, 4.5*scale, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000000';
+            if (h.moleState === 'whacked') {
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(h.x - 8*scale, currentMoleY + 4*scale); ctx.lineTo(h.x - 3*scale, currentMoleY + 9*scale);
+                ctx.moveTo(h.x - 3*scale, currentMoleY + 4*scale); ctx.lineTo(h.x - 8*scale, currentMoleY + 9*scale);
+                ctx.moveTo(h.x + 3*scale, currentMoleY + 4*scale); ctx.lineTo(h.x + 8*scale, currentMoleY + 9*scale);
+                ctx.moveTo(h.x + 8*scale, currentMoleY + 4*scale); ctx.lineTo(h.x + 3*scale, currentMoleY + 9*scale);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(h.x - 6*scale, currentMoleY + 6*scale, 2.5*scale, 0, Math.PI*2);
+                ctx.arc(h.x + 6*scale, currentMoleY + 6*scale, 2.5*scale, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            ctx.restore(); 
+            
+            ctx.save();
+            let labelW = 100 * scale;
+            let labelH = 34 * scale;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 2;
+            let textY = currentMoleY - 12*scale;
+            ctx.fillRect(h.x - labelW/2, textY - labelH/2, labelW, labelH);
+            ctx.strokeRect(h.x - labelW/2, textY - labelH/2, labelW, labelH);
+
+            ctx.fillStyle = '#451a03';
+            // --- FIXED: Integrated explicit accessible font stack onto canvas context text configurations ---
+            ctx.font = `bold ${Math.floor(21 * scale)}px "Andika", "Comic Neue", "Comic Sans MS", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(h.word, h.x, textY + (1 * scale)); 
+            ctx.restore();
+        }
+
+        ctx.strokeStyle = '#7c2d12';
+        ctx.lineWidth = 4 * scale;
+        ctx.beginPath();
+        ctx.ellipse(h.x, h.y + 10, radiusX, radiusY, 0, 0, Math.PI * 2);
+        ctx.stroke();
+    });
+}
+
+function updateMalletMotion() {
+    let targetX = mallet.targetX;
+    let targetY = mallet.targetY;
+
+    if (mallet.state === 'moving') {
+        mallet.progress += 0.14; 
+        if (mallet.progress >= 1) {
+            mallet.progress = 1;
+            if (mallet.isRed) {
+                mallet.state = 'shaking';
+                mallet.shakeTimer = 400; 
+            } else {
+                mallet.state = 'swinging';
+                mallet.swingTimer = 0; 
+            }
+        }
+        mallet.x = mallet.startX + (targetX - mallet.startX) * mallet.progress;
+        mallet.y = mallet.startY + (targetY - mallet.startY) * mallet.progress;
+    } else if (mallet.state === 'swinging') {
+        mallet.swingTimer += 0.15;
+        if (mallet.swingTimer >= Math.PI) {
+            mallet.state = 'idle';
+        }
+    } else if (mallet.state === 'shaking') {
+        mallet.shakeTimer -= 16;
+        if (mallet.shakeTimer <= 0) {
+            mallet.state = 'idle';
+            mallet.isRed = false;
+        }
+    } else {
+        mallet.x = canvas.width / 2;
+        mallet.y = canvas.height - 40;
+    }
+}
+
+function drawMallet() {
+    ctx.save();
+    let renderX = mallet.x;
+    let renderY = mallet.y;
+    let rotation = -0.3; 
+
+    if (mallet.state === 'swinging') {
+        rotation = -0.3 - Math.sin(mallet.swingTimer) * 1.1;
+    } else if (mallet.state === 'shaking') {
+        renderX += Math.sin(Date.now() * 0.1) * 6;
+        renderY += Math.cos(Date.now() * 0.1) * 6;
+    }
+
+    ctx.translate(renderX, renderY);
+    ctx.rotate(rotation);
+
+    let handleColor = '#d97706';
+    let hammerColor = '#ef4444'; 
+    if (!mallet.isRed) {
+        hammerColor = '#ea580c'; 
+    }
+
+    ctx.fillStyle = handleColor;
+    ctx.fillRect(-6, 0, 12, 65);
+
+    ctx.fillStyle = hammerColor;
+    ctx.strokeStyle = '#451a03';
+    ctx.lineWidth = 3;
+    ctx.fillRect(-35, -30, 70, 35);
+    ctx.strokeRect(-35, -30, 70, 35);
+
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(-35, -30, 8, 35);
+    ctx.fillRect(27, -30, 8, 35);
+
+    ctx.restore();
+}
+
+function checkWhackAttempt(holeIndex, clickedMole) {
+    mallet.startX = mallet.x;
+    mallet.startY = mallet.y;
+    mallet.targetX = clickedMole.x;
+    mallet.targetY = clickedMole.y - 15;
+    mallet.progress = 0;
+
+    if (clickedMole.word === targetWord) {
+        correctTaps++;
+        clickedMole.moleState = 'whacked';
+        mallet.isRed = false;
+        mallet.state = 'moving';
+        
+        playSqueakSound();
+        speakWord(targetWord);
+
+        for (let i = 0; i < 12; i++) {
+            activeParticles.push(new DirtParticle(clickedMole.x, clickedMole.y + 5));
+        }
+    } else {
+        incorrectTaps++;
+        clickedMole.shakeTimer = 400;
+        mallet.isRed = true;
+        mallet.state = 'moving';
+        playBuzzSound();
+    }
+}
+
+function drawUI() {
+    let boxW = Math.min(280, canvas.width * 0.6);
+    let boxH = 50;
+    let boxY = 15;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 4;
+    ctx.fillRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
+    ctx.strokeRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
+
+    ctx.fillStyle = '#1e3a8a';
+    // --- FIXED: Target Text Font Stack Fix ---
+    ctx.font = 'bold 24px "Andika", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`WHACK: ${targetWord}`, canvas.width / 2, boxY + boxH/2);
+
+    let scoreBoxW = canvas.width < 600 ? 180 : 210;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 2;
+    ctx.fillRect(15, 15, scoreBoxW, 75);
+    ctx.strokeRect(15, 15, scoreBoxW, 75);
+
+    ctx.fillStyle = '#14532d';
+    // --- FIXED: Score HUD Font Stack Fix ---
+    ctx.font = 'bold 13px "Andika", "Comic Neue", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 34);
+    ctx.fillText(`Whacked: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 54);
+    
+    const acc = getAccuracy();
+    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
+    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 70);
+}
+
+function getAccuracy() {
+    const total = correctTaps + incorrectTaps;
+    return total === 0 ? 100 : Math.round((correctTaps / total) * 100);
+}
+
+function drawEndScreen() {
+    ctx.fillStyle = 'rgba(20, 83, 45, 0.94)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#ffffff';
+    // --- FIXED: End Screen Header Font Stack Fix ---
+    ctx.font = 'bold 30px "Andika", "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    
+    if (gameWon) {
+        ctx.fillStyle = '#facc15';
+        ctx.fillText("🏆 Grand Whack Mole Champion! 🏆", canvas.width / 2, canvas.height / 2 - 20);
+    } else {
+        ctx.fillStyle = '#f87171';
+        ctx.fillText("Nice Try! Let's Whack Again!", canvas.width / 2, canvas.height / 2 - 20);
+    }
+    ctx.fillStyle = '#ffffff';
+    // --- FIXED: End Screen Score Font Stack Fix ---
+    ctx.font = '20px "Andika", "Comic Neue", sans-serif';
+    ctx.fillText(`Final Game Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 35);
+}
+
+function gameLoop() {
+    updateIndependentMoles();
+    updateMalletMotion();
+
+    drawScenery();
+
+    for (let i = activeParticles.length - 1; i >= 0; i--) {
+        activeParticles[i].update();
+        activeParticles[i].draw();
+        if (activeParticles[i].alpha <= 0) activeParticles.splice(i, 1);
+    }
+
+    drawMallet();
+    drawUI();
+
+    if (gameOver) {
+        drawEndScreen();
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+function handleInput(clientX, clientY) {
+    initAudioContextOnly(); 
+    if (gameOver || mallet.state === 'moving' || mallet.state === 'swinging') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    let hitRange = canvas.width < 600 ? 45 : 65;
+
+    for (let i = 0; i < HOLE_COUNT; i++) {
+        let h = holes[i];
+        if (h.moleYOffset > 0.2 && h.moleState !== 'whacked') {
+            if (x >= h.x - hitRange && x <= h.x + hitRange && y >= h.y - 70 && y <= h.y + 30) {
+                checkWhackAttempt(i, h);
+                break;
+            }
+        }
+    }
+}
+
+canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    handleInput(touch.clientX, touch.clientY);
+}, { passive: false });
+
+function restartGame() {
+    if (timerInterval) clearInterval(timerInterval);
+
+    const rawInput = document.getElementById('wordList').value;
+    words = rawInput.split(',').map(w => w.trim()).filter(w => w.length > 0);
+    if (words.length === 0) words = ['the'];
+    
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    
+    if (audioCtx && document.getElementById('audio-overlay').style.display === 'none') { 
+        speakWord(targetWord); 
+    }
+
+    timeLeft = 60;
+    correctTaps = 0;
+    incorrectTaps = 0;
+    activeParticles = [];
+    gameOver = false;
+    gameWon = false;
+    
+    mallet.state = 'idle';
+    mallet.isRed = false;
+
+    resizeCanvas();
+
+    timerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            gameOver = true;
+            gameWon = getAccuracy() >= 90;
+            clearInterval(timerInterval);
+            if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+            if (gameWon) playSqueakSound(); else playBuzzSound();
+        }
+    }, 1000);
+}
+
+window.onload = function() {
+    resizeCanvas();
+    restartGame();
+    requestAnimationFrame(gameLoop);
+    setTimeout(resizeCanvas, 100);
+    setTimeout(resizeCanvas, 500);
+};
+</script>
+
+</body>
+</html>
+    
+  </body>
+  
+</html>
