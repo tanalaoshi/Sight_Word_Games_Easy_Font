@@ -347,6 +347,15 @@ function playRimAndGroan() {
 function playWinSound() { playSwishAndCheer(); }
 function playLoseSound() { playRimAndGroan(); }
 
+function resetBallToFloor() {
+    let radius = canvas.width < 600 ? 16 : 20;
+    basketball.x = canvas.width / 2;
+    basketball.y = canvas.height - radius - 15;
+    basketball.progress = 1;
+    basketball.state = 'idle';
+    basketball.targetHoopIdx = -1;
+}
+
 function resizeCanvas() {
     const container = document.getElementById('game-container');
     if (!container || window.innerHeight > window.innerWidth) return; 
@@ -356,10 +365,8 @@ function resizeCanvas() {
     canvas.height = rect.height || (window.innerHeight * 0.75);
     
     resetHoopCoordinates();
-    
     if (basketball.state === 'idle') {
-        basketball.x = canvas.width / 2;
-        basketball.y = canvas.height - (canvas.width < 600 ? 16 : 20) - 15;
+        resetBallToFloor();
     }
 }
 window.addEventListener('resize', resizeCanvas);
@@ -371,7 +378,6 @@ function resetHoopCoordinates() {
     const oldHoops = hoops;
     hoops = [];
     const segment = canvas.width / HOOPS_COUNT;
-    // Lowered the hoops slightly down to accommodate the top clean dashboard row
     let calculatedHoopY = canvas.height * 0.28; 
     if (canvas.height < 450) calculatedHoopY = canvas.height * 0.25;
 
@@ -545,15 +551,19 @@ function drawBall() {
 
 function updateBallMotion() {
     if (basketball.state === 'flying') {
-        basketball.progress += 0.085; 
+        basketball.progress += 0.045; // Smooth arc movement speed
+        
         if (basketball.progress >= 1) {
             basketball.progress = 1;
-            basketball.state = 'idle';
-            checkShotResult(basketball.targetHoopIdx);
+            let targetIdx = basketball.targetHoopIdx;
+            checkShotResult(targetIdx);
+            resetBallToFloor(); // Crucial Fix: Immediately pop the ball back down
+            return;
         }
+        
         let progress = basketball.progress;
         basketball.x = basketball.startX + (basketball.targetX - basketball.startX) * progress;
-        let arcHeight = Math.sin(progress * Math.PI) * (canvas.height * 0.25); 
+        let arcHeight = Math.sin(progress * Math.PI) * (canvas.height * 0.28); 
         basketball.y = (basketball.startY + (basketball.targetY - basketball.startY) * progress) - arcHeight;
     }
 }
@@ -577,7 +587,6 @@ function checkShotResult(idx) {
 }
 
 function drawUI() {
-    // 1. Target word remains pinned safely in the bottom-left corner
     let boxW = Math.min(180, canvas.width * 0.4);
     let boxH = Math.min(45, canvas.height * 0.12);
     let targetBoxX = 15;
@@ -595,7 +604,6 @@ function drawUI() {
     ctx.textBaseline = 'middle';
     ctx.fillText(targetWord, targetBoxX + boxW/2, targetBoxY + boxH/2);
 
-    // 2. NEW STATUS BAR: Replaced old top-left box with a full width thin overlay strip
     ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
     ctx.fillRect(0, 0, canvas.width, 34);
 
@@ -603,15 +611,12 @@ function drawUI() {
     ctx.font = 'bold 13px "Comic Neue", sans-serif';
     ctx.textBaseline = 'middle';
     
-    // Left-aligned Timer metrics
     ctx.textAlign = 'left';
     ctx.fillText(`⏱️ Timer: ${timeLeft}s`, 15, 17);
 
-    // Center-aligned Score indicators
     ctx.textAlign = 'center';
     ctx.fillText(`🏀 Score: ${correctTaps}   ❌ Miss: ${incorrectTaps}`, canvas.width / 2, 17);
 
-    // Right-aligned Accuracy readout
     ctx.textAlign = 'right';
     const acc = getAccuracy();
     ctx.fillStyle = acc >= 90 ? '#4ade80' : '#f87171';
@@ -725,8 +730,7 @@ function restartGame() {
     gameOver = false;
     gameWon = false;
     
-    basketball.state = 'idle';
-
+    resetBallToFloor();
     resizeCanvas();
     populateHoops();
 
