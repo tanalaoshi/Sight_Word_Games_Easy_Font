@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Sight Word Monkeys</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -121,7 +110,6 @@ const WORD_DISPLAY_DURATION = 4500;
 let wordSwitchTimer = 0;
 let timerInterval = null;
 
-// --- EXPLICIT LIVE JUNGLE AUDIO CHANNEL ---
 let bgMusic = null;
 let audioCtx = null; 
 
@@ -149,7 +137,6 @@ function speakWord(text) {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
         
-        // --- NATURAL PHONETIC TRANSLATOR ---
         let voiceText = text.toLowerCase().trim();
         if (voiceText === 'a') {
             voiceText = 'uh';
@@ -182,7 +169,6 @@ function playHappyMonkey() {
     if (!audioCtx) return;
     let t = audioCtx.currentTime;
     
-    // High-pitched monkey chattering sequence
     for (let i = 0; i < 6; i++) {
         let osc = audioCtx.createOscillator();
         let gain = audioCtx.createGain();
@@ -204,7 +190,6 @@ function playHappyMonkey() {
         osc.stop(t + (i * 0.07) + 0.06);
     }
 
-    // Crunching sound effects
     for(let j=0; j<4; j++) {
         let oscB = audioCtx.createOscillator();
         let gainB = audioCtx.createGain();
@@ -258,7 +243,7 @@ function resetMonkeyCoordinates() {
     const oldMonkeys = monkeys;
     monkeys = [];
     const segment = canvas.width / MONKEY_COUNT;
-    let calculatedY = canvas.height * 0.25; 
+    let calculatedY = canvas.height * 0.28; 
 
     for (let i = 0; i < MONKEY_COUNT; i++) {
         monkeys.push({
@@ -381,7 +366,6 @@ function drawMonkeys() {
 
         const mX = m.x + shakeOffsetX;
         
-        // Vines
         ctx.strokeStyle = '#064e3b';
         ctx.lineWidth = 4;
         ctx.beginPath();
@@ -392,7 +376,6 @@ function drawMonkeys() {
         ctx.translate(mX, m.y);
         ctx.rotate(swingAngle);
 
-        // Arms
         ctx.strokeStyle = '#78350f';
         ctx.lineWidth = 6 * scaleFactor;
         ctx.lineCap = 'round';
@@ -403,7 +386,6 @@ function drawMonkeys() {
         ctx.lineTo(15 * scaleFactor, -40 * scaleFactor);
         ctx.stroke();
 
-        // Legs
         ctx.beginPath();
         ctx.moveTo(-12 * scaleFactor, 15 * scaleFactor);
         ctx.lineTo(-16 * scaleFactor, 38 * scaleFactor);
@@ -411,13 +393,11 @@ function drawMonkeys() {
         ctx.lineTo(16 * scaleFactor, 38 * scaleFactor);
         ctx.stroke();
 
-        // Tail
         ctx.lineWidth = 3 * scaleFactor;
         ctx.beginPath();
         ctx.arc(-20 * scaleFactor, 15 * scaleFactor, 14 * scaleFactor, 0, Math.PI);
         ctx.stroke();
 
-        // Torso
         ctx.fillStyle = '#78350f';
         ctx.beginPath();
         ctx.ellipse(0, 12 * scaleFactor, 16 * scaleFactor, 20 * scaleFactor, 0, 0, Math.PI * 2);
@@ -427,13 +407,11 @@ function drawMonkeys() {
         ctx.ellipse(0, 12 * scaleFactor, 10 * scaleFactor, 13 * scaleFactor, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Head
         ctx.fillStyle = '#78350f';
         ctx.beginPath();
         ctx.arc(0, -12 * scaleFactor, 22 * scaleFactor, 0, Math.PI * 2);
         ctx.fill();
 
-        // Ears
         ctx.beginPath();
         ctx.arc(-22 * scaleFactor, -14 * scaleFactor, 7 * scaleFactor, 0, Math.PI * 2);
         ctx.arc(22 * scaleFactor, -14 * scaleFactor, 7 * scaleFactor, 0, Math.PI * 2);
@@ -444,7 +422,6 @@ function drawMonkeys() {
         ctx.arc(22 * scaleFactor, -14 * scaleFactor, 4 * scaleFactor, 0, Math.PI * 2);
         ctx.fill();
 
-        // Mask Face
         ctx.fillStyle = '#fde68a';
         ctx.beginPath();
         ctx.arc(-8 * scaleFactor, -14 * scaleFactor, 10 * scaleFactor, 0, Math.PI * 2);
@@ -452,7 +429,6 @@ function drawMonkeys() {
         ctx.arc(0, -6 * scaleFactor, 12 * scaleFactor, 0, Math.PI * 2);
         ctx.fill();
 
-        // Eyes
         ctx.fillStyle = '#000000';
         if (m.shakeTimer > 0) {
             ctx.font = `bold ${13 * scaleFactor}px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
@@ -465,7 +441,6 @@ function drawMonkeys() {
             ctx.fill();
         }
 
-        // Chewing mouth layout
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 2.5;
         
@@ -494,7 +469,6 @@ function drawMonkeys() {
 
         ctx.restore();
 
-        // Word text tags
         if (!m.wasHit) {
             ctx.save();
             let labelW = 90 * scaleFactor;
@@ -595,40 +569,42 @@ function checkThrowResult(idx) {
 }
 
 function drawUI() {
-    let monkeyY = monkeys[0] ? monkeys[0].y : canvas.height * 0.25;
-    let targetBoxY = monkeyY + canvas.height * 0.16; 
-    
-    let boxW = Math.min(220, canvas.width * 0.5);
-    let boxH = Math.min(50, canvas.height * 0.12);
+    // --- TARGET WORD IN BOTTOM-LEFT CORNER ---
+    let boxW = Math.min(180, canvas.width * 0.4);
+    let boxH = Math.min(45, canvas.height * 0.12);
+    let targetBoxX = 15;
+    let targetBoxY = canvas.height - boxH - 15;
 
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#16a34a';
-    ctx.lineWidth = 4;
-    ctx.fillRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
-    ctx.strokeRect(canvas.width / 2 - boxW/2, targetBoxY, boxW, boxH);
+    ctx.lineWidth = 3;
+    ctx.fillRect(targetBoxX, targetBoxY, boxW, boxH);
+    ctx.strokeRect(targetBoxX, targetBoxY, boxW, boxH);
 
     ctx.fillStyle = '#064e3b';
     ctx.font = `bold ${boxH * 0.55}px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(targetWord, canvas.width / 2, targetBoxY + boxH/2);
+    ctx.fillText(targetWord, targetBoxX + boxW/2, targetBoxY + boxH/2);
 
-    let scoreBoxW = canvas.width < 600 ? 190 : 230;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-    ctx.strokeStyle = '#a7f3d0';
-    ctx.lineWidth = 2;
-    ctx.fillRect(15, 15, scoreBoxW, 85);
-    ctx.strokeRect(15, 15, scoreBoxW, 85);
+    // --- low-profile STATUS BAR AT THE VERY TOP ---
+    ctx.fillStyle = 'rgba(2, 44, 34, 0.8)';
+    ctx.fillRect(0, 0, canvas.width, 34);
 
-    ctx.fillStyle = '#065f46';
-    ctx.font = `bold 14px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 35);
-    ctx.fillText(`Caught: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 55);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold 13px 'Chalkboard SE', 'Comic Neue', 'Comic Sans MS', sans-serif`;
+    ctx.textBaseline = 'middle';
     
+    ctx.textAlign = 'left';
+    ctx.fillText(`⏱️ Timer: ${timeLeft}s`, 15, 17);
+
+    ctx.textAlign = 'center';
+    ctx.fillText(`🐒 Caught: ${correctTaps}   ❌ Missed: ${incorrectTaps}`, canvas.width / 2, 17);
+
+    ctx.textAlign = 'right';
     const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 75);
+    ctx.fillStyle = acc >= 90 ? '#4ade80' : '#f87171';
+    ctx.fillText(`🎯 Accuracy: ${acc}%`, canvas.width - 15, 17);
 }
 
 function getAccuracy() {
@@ -759,8 +735,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
 </html>
