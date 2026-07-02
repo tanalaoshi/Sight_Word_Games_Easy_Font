@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Ending Sound Fishing</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -29,11 +18,30 @@
             user-select: none;
             -webkit-user-select: none;
         }
+        /* Low Profile Dark Header Bar at the very top */
+        #header-bar {
+            background-color: #1e293b;
+            color: #f8fafc;
+            height: 5vh;
+            min-height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #0f172a;
+        }
+        #header-bar .hud-item {
+            display: flex;
+            gap: 15px;
+        }
         #game-container {
             position: relative;
             width: 100vw;
-            height: 75vh;
-            min-height: 400px;
+            height: 70vh;
+            min-height: 365px;
             background: #0ea5e9; 
         }
         canvas {
@@ -134,6 +142,14 @@
     </style>
 </head>
 <body>
+
+<header id="header-bar">
+    <div id="timer-text">Time Left: 60s</div>
+    <div class="hud-item">
+        <span id="score-text">Caught: 0 | Missed: 0</span>
+        <span id="accuracy-text">Accuracy: 100% (Need 90%)</span>
+    </div>
+</header>
 
 <div id="game-container">
     <div id="audio-overlay">
@@ -316,7 +332,7 @@ function playErrorBuzz() {
 
 function resizeCanvas() {
     let targetWidth = window.innerWidth || 800;
-    let targetHeight = (window.innerHeight * 0.75) || 500;
+    let targetHeight = (window.innerHeight * 0.70) || 500;
     
     const container = document.getElementById('game-container');
     if (container) {
@@ -337,7 +353,7 @@ function initSpots() {
     const rows = 2;
     const cellW = canvas.width / cols;
     const cellH = (canvas.height * 0.55) / rows;
-    const startY = canvas.height * 0.22;
+    const startY = canvas.height * 0.18;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -374,7 +390,8 @@ function updateFish() {
                 if (s.fishYOffset >= 1) {
                     s.fishYOffset = 1;
                     s.fishState = 'up';
-                    s.stateTimer = time + 2500 + Math.random() * 1500;
+                    // Fish stay above water for 2 extra seconds (4500ms instead of 2500ms)
+                    s.stateTimer = time + 4500 + Math.random() * 1500;
                 }
                 break;
             case 'up':
@@ -511,7 +528,6 @@ function drawWaterHoles() {
             ctx.strokeRect(s.x - labelW/2, textY - labelH/2, labelW, labelH);
 
             ctx.fillStyle = '#0c4a6e';
-            // --- FIXED: Integrated explicit clean font stack onto fish labels ---
             ctx.font = `bold ${Math.floor(14 * scale)}px "Andika", "Comic Neue", "Comic Sans MS", sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -554,7 +570,7 @@ function updateNetMotion() {
             net.isRed = false;
         }
     } else {
-        net.x = canvas.width * 0.2;
+        net.x = canvas.width * 0.25;
         net.y = canvas.height - 35;
     }
 }
@@ -577,7 +593,6 @@ function drawNetAndBarrel() {
 
     // --- ACCUMULATING CARTOON FISH PILE ---
     ctx.save();
-    // Clip drawing area inside the bucket opening
     ctx.beginPath();
     ctx.rect(bX + 2, bY + 4, bW - 4, bH - 6);
     ctx.clip();
@@ -621,6 +636,7 @@ function drawNetAndBarrel() {
             ctx.restore();
         }
     }
+    ctx.clip();
     ctx.restore();
 
     ctx.strokeStyle = '#451a03';
@@ -700,43 +716,40 @@ function handleWhackAttempt(idx, clickedSpot) {
         net.state = 'swooping';
         playErrorBuzz();
     }
+    updateDOMHUD();
+}
+
+function updateDOMHUD() {
+    document.getElementById('timer-text').textContent = `Time Left: ${timeLeft}s`;
+    document.getElementById('score-text').textContent = `Caught: ${correctTaps} | Missed: ${incorrectTaps}`;
+    
+    const acc = getAccuracy();
+    const accText = document.getElementById('accuracy-text');
+    accText.textContent = `Accuracy: ${acc}% (Need 90%)`;
+    accText.style.color = acc >= 90 ? '#4ade80' : '#f87171';
 }
 
 function drawUI() {
-    let boxW = Math.min(240, canvas.width * 0.53);
-    let boxH = 46;
-    let boxY = 15;
+    // Clean target box drawn in the bottom-left corner
+    let boxW = 110; 
+    let boxH = 44;
+    let boxX = 15;
+    let boxY = canvas.height - boxH - 15;
 
+    ctx.save();
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = '#f43f5e';
     ctx.lineWidth = 4;
-    ctx.fillRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
-    ctx.strokeRect(canvas.width / 2 - boxW/2, boxY, boxW, boxH);
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
 
+    // Displays strictly lowercase pattern endings (-ff, -ss, etc.)
     ctx.fillStyle = '#be123c';
-    // --- FIXED: Target Text Heading Font Fix ---
-    ctx.font = 'bold 22px "Andika", "Comic Neue", "Comic Sans MS", sans-serif';
+    ctx.font = 'bold 24px "Andika", "Comic Neue", "Comic Sans MS", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`CATCH: -${targetPattern}`, canvas.width / 2, boxY + boxH/2);
-
-    let scoreBoxW = canvas.width < 600 ? 180 : 210;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
-    ctx.strokeStyle = '#f43f5e';
-    ctx.lineWidth = 2;
-    ctx.fillRect(15, 15, scoreBoxW, 75);
-    ctx.strokeRect(15, 15, scoreBoxW, 75);
-
-    ctx.fillStyle = '#0c4a6e';
-    // --- FIXED: Score HUD Panel Font Fix ---
-    ctx.font = 'bold 13px "Andika", "Comic Neue", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Time Left: ${timeLeft}s`, 25, 34);
-    ctx.fillText(`Caught: ${correctTaps}   Missed: ${incorrectTaps}`, 25, 54);
-    
-    const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, 25, 70);
+    ctx.fillText(`-${targetPattern.toLowerCase()}`, boxX + boxW / 2, boxY + boxH / 2);
+    ctx.restore();
 }
 
 function getAccuracy() {
@@ -748,7 +761,6 @@ function drawEndScreen() {
     ctx.fillStyle = 'rgba(12, 74, 110, 0.95)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff';
-    // --- FIXED: Game End Title Font Fix ---
     ctx.font = 'bold 28px "Andika", "Comic Neue", sans-serif';
     ctx.textAlign = 'center';
     
@@ -760,7 +772,6 @@ function drawEndScreen() {
         ctx.fillText("Splendid Effort! Let's Fish Again!", canvas.width / 2, canvas.height / 2 - 20);
     }
     ctx.fillStyle = '#ffffff';
-    // --- FIXED: Game End Summary Score Font Fix ---
     ctx.font = '20px "Andika", "Comic Neue", sans-serif';
     ctx.fillText(`Final Net Catch Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 35);
 }
@@ -822,7 +833,6 @@ function restartGame() {
     phonicsWords = rawInput.split(',').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
     if (phonicsWords.length === 0) phonicsWords = ['bell'];
     
-    // Select one fixed target pattern for the whole game round
     targetPattern = PATTERNS[Math.floor(Math.random() * PATTERNS.length)];
     
     if (audioCtx && document.getElementById('audio-overlay').style.display === 'none') { 
@@ -841,9 +851,11 @@ function restartGame() {
     net.isRed = false;
 
     resizeCanvas();
+    updateDOMHUD();
 
     timerInterval = setInterval(() => {
         timeLeft--;
+        updateDOMHUD();
         if (timeLeft <= 0) {
             gameOver = true;
             gameWon = getAccuracy() >= 90;
@@ -864,8 +876,4 @@ window.onload = function() {
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
 </html>
