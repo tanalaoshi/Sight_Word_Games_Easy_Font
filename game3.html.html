@@ -1,16 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
-  <head>
-    <meta charset="UTF-8">
-    <title>Sight Word Apple Tree</title>
-    
-
-  </head>
-    
-  <body>
-  <!DOCTYPE html>
-<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -24,16 +13,35 @@
             margin: 0;
             padding: 0;
             background-color: #f0f0f0;
-            /* Updated to uniform Comic Neue */
             font-family: 'Comic Neue', sans-serif;
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
         }
+        /* Low Profile Dark Header Bar at the very top */
+        #header-bar {
+            background-color: #1e293b;
+            color: #f8fafc;
+            height: 5vh;
+            min-height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            font-size: 14px;
+            font-weight: bold;
+            border-bottom: 2px solid #0f172a;
+        }
+        #header-bar .hud-item {
+            display: flex;
+            gap: 15px;
+        }
         #game-container {
             position: relative;
             width: 100vw;
-            height: 80vh;
+            height: 75vh;
+            min-height: 365px;
             background: linear-gradient(to bottom, #a1c4fd 0%, #c2e9fb 50%, #d4fc79 85%, #96e6a1 100%);
         }
         canvas {
@@ -92,6 +100,14 @@
 </head>
 <body>
 
+<header id="header-bar">
+    <div id="timer-text">Timer: 60s</div>
+    <div class="hud-item">
+        <span id="score-text">Hits: 0 | Wrong: 0</span>
+        <span id="accuracy-text">Accuracy: 100% (Need 90%)</span>
+    </div>
+</header>
+
 <div id="game-container">
     <canvas id="gameCanvas"></canvas>
 </div>
@@ -139,7 +155,6 @@ function speakWord(text) {
     if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel(); 
         
-        // --- "A" SOUND PATCH ---
         let textToSpeak = text;
         if (text.toLowerCase().trim() === 'a') {
             textToSpeak = 'ah'; 
@@ -229,20 +244,17 @@ if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
-// --- END AUDIO ENGINES ---
 
 function resizeCanvas() {
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight * 0.8;
+    canvas.height = window.innerHeight * 0.75;
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// --- SCENERY BACKGROUND RENDER ENGINE ---
 function drawOrchardBackground() {
     const centerX = canvas.width / 2;
 
-    // 1. Draw Tree Trunk
     ctx.fillStyle = '#5c4033'; 
     ctx.beginPath();
     ctx.moveTo(centerX - 45, 0);
@@ -254,7 +266,6 @@ function drawOrchardBackground() {
     ctx.closePath();
     ctx.fill();
 
-    // Bark lines
     ctx.strokeStyle = '#453026';
     ctx.lineWidth = 6;
     ctx.beginPath();
@@ -262,7 +273,6 @@ function drawOrchardBackground() {
     ctx.moveTo(centerX + 15, 40); ctx.lineTo(centerX + 20, canvas.height - 120);
     ctx.stroke();
 
-    // 2. Greenery Canopy
     ctx.fillStyle = '#3e8e41'; 
     ctx.beginPath();
     ctx.arc(centerX, -20, 160, 0, Math.PI * 2);
@@ -326,7 +336,6 @@ class Apple {
         ctx.fillRect(displayX - 32, this.y - 12, 64, 24);
 
         ctx.fillStyle = '#000000';
-        // Updated Font inside falling apples to Comic Neue
         ctx.font = 'bold 20px "Comic Neue", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -388,41 +397,44 @@ function getAccuracy() {
     return Math.round((correctTaps / total) * 100);
 }
 
-function drawUI() {
-    ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 5;
-    ctx.lineJoin = 'round';
-    ctx.fillRect(30, 20, 250, 70);
-    ctx.strokeRect(30, 20, 250, 70);
-
-    ctx.fillStyle = '#000000';
-    // Updated Target Box font to Comic Neue
-    ctx.font = 'bold 42px "Comic Neue", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(targetWord, 155, 68);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.fillRect(canvas.width - 280, 20, 250, 110);
-    ctx.strokeRect(canvas.width - 280, 20, 250, 110);
-
-    ctx.fillStyle = '#333333';
-    // Updated Stats Dashboard font to Comic Neue
-    ctx.font = 'bold 18px "Comic Neue", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Timer: ${timeLeft}s`, canvas.width - 260, 50);
-    ctx.fillText(`Hits: ${correctTaps}   Wrong: ${incorrectTaps}`, canvas.width - 260, 80);
-     
+function updateDOMHUD() {
+    document.getElementById('timer-text').textContent = `Timer: ${timeLeft}s`;
+    document.getElementById('score-text').textContent = `Hits: ${correctTaps} | Wrong: ${incorrectTaps}`;
+    
     const acc = getAccuracy();
-    ctx.fillStyle = acc >= 90 ? '#2e7d32' : '#c62828';
-    ctx.fillText(`Accuracy: ${acc}% (Need 90%)`, canvas.width - 260, 110);
+    const accText = document.getElementById('accuracy-text');
+    accText.textContent = `Accuracy: ${acc}% (Need 90%)`;
+    accText.style.color = acc >= 90 ? '#4ade80' : '#f87171';
+}
+
+function drawUI() {
+    // Clean Target box positioned natively in canvas bottom-left corner
+    let boxW = 140;
+    let boxH = 54;
+    let boxX = 20;
+    let boxY = canvas.height - boxH - 20;
+
+    ctx.save();
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#52a447';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.fillRect(boxX, boxY, boxW, boxH);
+    ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+    // Displays strictly lowercase target word text cleanly inside the box
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 32px "Comic Neue", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(targetWord.toLowerCase(), boxX + boxW / 2, boxY + boxH / 2 + 2);
+    ctx.restore();
 }
 
 function drawEndScreen() {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff';
-    // Updated Ending Message font to Comic Neue
     ctx.font = 'bold 50px "Comic Neue", sans-serif';
     ctx.textAlign = 'center';
      
@@ -434,7 +446,6 @@ function drawEndScreen() {
         ctx.fillText("Try Again!", canvas.width / 2, canvas.height / 2 - 20);
     }
     ctx.fillStyle = '#ffffff';
-    // Updated Final Accuracy message to Comic Neue
     ctx.font = '30px "Comic Neue", sans-serif';
     ctx.fillText(`Final Accuracy: ${getAccuracy()}%`, canvas.width / 2, canvas.height / 2 + 40);
 }
@@ -502,6 +513,7 @@ function handleInput(clientX, clientY) {
             break; 
         }
     }
+    updateDOMHUD();
 }
 
 canvas.addEventListener('mousedown', (e) => handleInput(e.clientX, e.clientY));
@@ -535,8 +547,12 @@ function restartGame() {
     gameInterval = setInterval(spawnApple, 1100); 
     startUkuleleMusic(); 
 
+    resizeCanvas();
+    updateDOMHUD();
+
     timerInterval = setInterval(() => {
         timeLeft--;
+        updateDOMHUD();
         if (timeLeft <= 0) {
             gameOver = true;
             gameWon = getAccuracy() >= 90;
@@ -553,12 +569,11 @@ function restartGame() {
 
     requestAnimationFrame(gameLoop);
 }
-restartGame();
+
+window.onload = function() {
+    restartGame();
+};
 </script>
 
 </body>
-</html>
-    
-  </body>
-  
 </html>
